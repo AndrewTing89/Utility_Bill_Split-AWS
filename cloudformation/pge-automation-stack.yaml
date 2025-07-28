@@ -1,0 +1,299 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'PG&E Bill Split Automation - AWS Infrastructure'
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: 'pge-bill-automation'
+    Description: 'Name for the project resources'
+  
+  Environment:
+    Type: String
+    Default: 'dev'
+    AllowedValues: ['dev', 'prod']
+    Description: 'Environment (dev or prod)'
+  
+  NotificationEmail:
+    Type: String
+    Description: 'Email address for notifications'
+    Default: 'andrewhting@gmail.com'
+
+Resources:
+  # S3 Bucket for PDF storage
+  PDFBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${ProjectName}-pdfs-${Environment}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: 'DeleteOldPDFs'
+            Status: Enabled
+            ExpirationInDays: 2555  # 7 years for tax records
+      VersioningConfiguration:
+        Status: Enabled
+
+  # DynamoDB Table for Bills
+  BillsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${ProjectName}-bills-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: 'bill_id'
+          AttributeType: 'S'
+        - AttributeName: 'due_date'
+          AttributeType: 'S'
+      KeySchema:
+        - AttributeName: 'bill_id'
+          KeyType: 'HASH'
+      GlobalSecondaryIndexes:
+        - IndexName: 'DueDateIndex'
+          KeySchema:
+            - AttributeName: 'due_date'
+              KeyType: 'HASH'
+          Projection:
+            ProjectionType: 'ALL'
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+
+  # DynamoDB Table for Processing Log
+  ProcessingLogTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${ProjectName}-processing-log-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: 'bill_id'
+          AttributeType: 'S'
+        - AttributeName: 'timestamp'
+          AttributeType: 'S'
+      KeySchema:
+        - AttributeName: 'bill_id'
+          KeyType: 'HASH'
+        - AttributeName: 'timestamp'
+          KeyType: 'RANGE'
+      TimeToLiveSpecification:
+        AttributeName: 'ttl'
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+
+  # Secrets Manager for configuration
+  ConfigSecrets:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub '${ProjectName}-config-${Environment}'
+      Description: 'Configuration settings for PG&E automation'
+      SecretString: !Sub |
+        {
+          "gmail_user": "andrewhting@gmail.com",
+          "roommate_email": "loushic@gmail.com",
+          "my_email": "andrewhting@gmail.com",
+          "roommate_venmo": "UshiLo",
+          "my_venmo": "andrewhting",
+          "my_phone": "+19298884132",
+          "roommate_split_ratio": 0.333333,
+          "my_split_ratio": 0.666667,
+          "test_mode": true,
+          "enable_email_notifications": true,
+          "enable_text_messaging": true
+        }
+
+  # IAM Role for Lambda
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-lambda-role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: 'PGEAutomationPolicy'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # DynamoDB permissions
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                Resource:
+                  - !GetAtt BillsTable.Arn
+                  - !GetAtt ProcessingLogTable.Arn
+              # S3 permissions
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource: !Sub '${PDFBucket}/*'
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource: !GetAtt PDFBucket.Arn
+              # SES permissions
+              - Effect: Allow
+                Action:
+                  - ses:SendEmail
+                  - ses:SendRawEmail
+                Resource: '*'
+              # SNS permissions for SMS
+              - Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource: '*'
+              # Secrets Manager permissions
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref ConfigSecrets
+              # CloudWatch Logs permissions
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+
+  # Lambda Function
+  AutomationFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-automation-${Environment}'
+      Runtime: python3.9
+      Handler: lambda_handler.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 900  # 15 minutes
+      MemorySize: 512
+      Environment:
+        Variables:
+          BILLS_TABLE: !Ref BillsTable
+          PROCESSING_LOG_TABLE: !Ref ProcessingLogTable
+          PDF_BUCKET: !Ref PDFBucket
+          SECRETS_ARN: !Ref ConfigSecrets
+          ENVIRONMENT: !Ref Environment
+      DeadLetterQueue:
+        TargetArn: !GetAtt ErrorQueue.Arn
+      Code:
+        ZipFile: |
+          def lambda_handler(event, context):
+              return {
+                  'statusCode': 200,
+                  'body': 'Placeholder - will be replaced with actual code'
+              }
+
+  # EventBridge Rule for monthly trigger
+  MonthlyScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub '${ProjectName}-monthly-schedule-${Environment}'
+      Description: 'Trigger PG&E automation on 5th of each month'
+      ScheduleExpression: 'cron(0 17 5 * ? *)'  # 5th day, 5PM UTC (9AM PST)
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt AutomationFunction.Arn
+          Id: 'AutomationTarget'
+          Input: !Sub |
+            {
+              "source": "eventbridge",
+              "detail-type": "Scheduled Event",
+              "detail": {
+                "trigger": "monthly",
+                "test_mode": false
+              }
+            }
+
+  # Permission for EventBridge to invoke Lambda
+  LambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref AutomationFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt MonthlyScheduleRule.Arn
+
+  # SQS Queue for error handling
+  ErrorQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${ProjectName}-errors-${Environment}'
+      MessageRetentionPeriod: 1209600  # 14 days
+      VisibilityTimeoutSeconds: 60
+
+  # SNS Topic for notifications
+  NotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub '${ProjectName}-notifications-${Environment}'
+      Subscription:
+        - Protocol: email
+          Endpoint: !Ref NotificationEmail
+
+  # CloudWatch Alarm for Lambda errors
+  LambdaErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-lambda-errors-${Environment}'
+      AlarmDescription: 'Alert when Lambda function has errors'
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AutomationFunction
+      AlarmActions:
+        - !Ref NotificationTopic
+
+Outputs:
+  LambdaFunctionArn:
+    Description: 'ARN of the Lambda function'
+    Value: !GetAtt AutomationFunction.Arn
+    Export:
+      Name: !Sub '${ProjectName}-lambda-arn-${Environment}'
+
+  S3BucketName:
+    Description: 'Name of the S3 bucket for PDFs'
+    Value: !Ref PDFBucket
+    Export:
+      Name: !Sub '${ProjectName}-s3-bucket-${Environment}'
+
+  BillsTableName:
+    Description: 'Name of the DynamoDB bills table'
+    Value: !Ref BillsTable
+    Export:
+      Name: !Sub '${ProjectName}-bills-table-${Environment}'
+
+  SecretsArn:
+    Description: 'ARN of the secrets manager secret'
+    Value: !Ref ConfigSecrets
+    Export:
+      Name: !Sub '${ProjectName}-secrets-arn-${Environment}'
+
+  DashboardURL:
+    Description: 'URL to monitor the automation'
+    Value: !Sub 'https://console.aws.amazon.com/lambda/home?region=${AWS::Region}#/functions/${AutomationFunction}'
