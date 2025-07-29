@@ -352,6 +352,49 @@ def process_bills():
             'error': str(e)
         }), 500
 
+@app.route('/api/check-payments', methods=['POST'])
+def check_payments():
+    """Trigger Lambda function to check for Venmo payment confirmations only"""
+    try:
+        data = request.get_json() or {}
+        test_mode = data.get('test_mode', True)
+        
+        # Invoke Lambda function with payment check flag
+        payload = {
+            'test_mode': test_mode,
+            'manual_trigger': True,
+            'payment_check_only': True
+        }
+        
+        response = lambda_client.invoke(
+            FunctionName=LAMBDA_FUNCTION,
+            InvocationType='RequestResponse',
+            Payload=json.dumps(payload)
+        )
+        
+        # Parse response
+        result = json.loads(response['Payload'].read())
+        
+        if response['StatusCode'] == 200:
+            body = json.loads(result.get('body', '{}'))
+            return jsonify({
+                'success': True,
+                'message': 'Bills processed successfully',
+                'result': body.get('result', {})
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Lambda function failed'
+            }), 500
+            
+    except Exception as e:
+        logger.error(f"Error processing bills: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @app.route('/api/create-venmo-request', methods=['POST'])
 def create_venmo_request():
     """Create Venmo payment request"""

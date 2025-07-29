@@ -59,6 +59,9 @@
                     <button class="btn btn-primary" onclick="processBills()">
                         <i class="bi bi-envelope-open"></i> Process New Bills
                     </button>
+                    <button class="btn btn-success" onclick="checkPayments()">
+                        <i class="bi bi-credit-card-2-front"></i> Check for Payments
+                    </button>
                     <button class="btn btn-outline-secondary" onclick="testConnections()">
                         <i class="bi bi-wifi"></i> Test Connections
                     </button>
@@ -121,9 +124,19 @@
                                 <td>{{ bill.due_date }}</td>
                                 <td class="split-amount">${{ "%.2f"|format(bill.roommate_portion) }}</td>
                                 <td>
-                                    <span class="badge bg-{{ 'warning' if bill.status == 'pending' else 'success' }} status-badge">
+                                    {% if bill.payment_confirmed %}
+                                    <span class="badge bg-success status-badge">
+                                        <i class="bi bi-check-circle"></i> Paid
+                                    </span>
+                                    {% elif bill.email_sent %}
+                                    <span class="badge bg-warning status-badge">
+                                        <i class="bi bi-clock"></i> Awaiting Payment
+                                    </span>
+                                    {% else %}
+                                    <span class="badge bg-secondary status-badge">
                                         {{ bill.status.title() }}
                                     </span>
+                                    {% endif %}
                                 </td>
                                 <td>
                                     <a href="{{ url_for('bill_detail', bill_id=bill.id) }}" class="btn btn-sm btn-outline-primary">
@@ -254,6 +267,45 @@ function processBills() {
     .catch(error => {
         hideLoading(button, originalText);
         showToast('Error processing bills: ' + error.message, 'error');
+    });
+}
+
+function checkPayments() {
+    const button = event.target;
+    const originalText = showLoading(button);
+    
+    fetch('/api/check-payments', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({test_mode: true, manual_trigger: true})
+    })
+    .then(response => response.json())
+    .then(data => {
+        hideLoading(button, originalText);
+        
+        if (data.success) {
+            const result = data.result;
+            let message = `Payment check completed! `;
+            
+            if (result.bills_marked_paid > 0) {
+                message += `${result.bills_marked_paid} bill(s) marked as paid. `;
+            }
+            
+            if (result.payments_processed > 0) {
+                message += `Processed ${result.payments_processed} payment email(s).`;
+            } else {
+                message += `No new payments found.`;
+            }
+            
+            showToast(message, 'success');
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            showToast(data.message || 'Error checking payments', 'error');
+        }
+    })
+    .catch(error => {
+        hideLoading(button, originalText);
+        showToast('Error checking payments: ' + error.message, 'error');
     });
 }
 

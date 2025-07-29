@@ -1,7 +1,0 @@
-[
-  {
-    "Id": "1",
-    "Arn": "arn:aws:lambda:us-west-2:901398601400:function:pge-bill-automation-automation-dev",
-    "Input": "{\"test_mode\": false, \"scheduled\": true}"
-  }
-]

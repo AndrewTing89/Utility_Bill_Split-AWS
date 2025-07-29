@@ -1,1 +1,0 @@
-{"statusCode": 200, "body": "{\"success\": true, \"message\": \"Automation completed successfully\", \"timestamp\": \"2025-07-29T03:27:15.663516\", \"request_id\": \"09f189ae-200c-4b8e-baa6-a117c28e0f40\", \"result\": {\"bills_processed\": 0, \"pdfs_generated\": 0, \"emails_sent\": 0, \"sms_sent\": 0, \"errors\": []}}"}

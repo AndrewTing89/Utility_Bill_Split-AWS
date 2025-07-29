@@ -1,6 +1,0 @@
-{
-  "Variables": {
-    "SECRETS_ARN": "arn:aws:secretsmanager:us-west-2:901398601400:secret:pge-bill-automation-secrets-dev-Oq01Wy",
-    "BILLS_TABLE": "pge-bill-automation-bills-dev"
-  }
-}
