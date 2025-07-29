@@ -1,0 +1,398 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - PG&E Bill Split{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Statistics Cards -->
+    <div class="col-12 mb-4">
+        <div class="row">
+            <div class="col-md-3 mb-3">
+                <div class="card text-center h-100">
+                    <div class="card-body">
+                        <i class="bi bi-receipt text-primary" style="font-size: 2rem;"></i>
+                        <h5 class="card-title mt-2">{{ stats.total_bills }}</h5>
+                        <p class="card-text text-muted">Total Bills</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card text-center h-100">
+                    <div class="card-body">
+                        <i class="bi bi-clock text-warning" style="font-size: 2rem;"></i>
+                        <h5 class="card-title mt-2">{{ stats.pending_bills }}</h5>
+                        <p class="card-text text-muted">Pending Bills</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card text-center h-100">
+                    <div class="card-body">
+                        <i class="bi bi-currency-dollar text-success" style="font-size: 2rem;"></i>
+                        <h5 class="card-title mt-2">${{ "%.2f"|format(stats.total_amount) }}</h5>
+                        <p class="card-text text-muted">Total Amount</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card text-center h-100">
+                    <div class="card-body">
+                        <i class="bi bi-person-check text-info" style="font-size: 2rem;"></i>
+                        <h5 class="card-title mt-2">${{ "%.2f"|format(stats.total_roommate_portion) }}</h5>
+                        <p class="card-text text-muted">Roommate Total</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Quick Actions -->
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-lightning-charge"></i> Quick Actions
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-primary" onclick="processBills()">
+                        <i class="bi bi-envelope-open"></i> Process New Bills
+                    </button>
+                    <button class="btn btn-outline-secondary" onclick="testConnections()">
+                        <i class="bi bi-wifi"></i> Test Connections
+                    </button>
+                    <a href="{{ url_for('bills_list') }}" class="btn btn-outline-info">
+                        <i class="bi bi-list"></i> View All Bills
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Status -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <i class="bi bi-gear"></i> System Status
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-6">
+                        <div class="mb-2">
+                            <i class="bi bi-file-earmark-pdf text-{{ 'success' if stats.pdfs_generated > 0 else 'secondary' }}"></i>
+                            <br>
+                            <small>{{ stats.pdfs_generated }} PDFs</small>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="mb-2">
+                            <i class="bi bi-envelope text-{{ 'success' if stats.pdfs_sent > 0 else 'secondary' }}"></i>
+                            <br>
+                            <small>{{ stats.pdfs_sent }} Emails</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Bills -->
+    <div class="col-md-8 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-receipt"></i> Recent Bills
+            </div>
+            <div class="card-body">
+                {% if recent_bills %}
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Amount</th>
+                                <th>Due Date</th>
+                                <th>Roommate Share</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for bill in recent_bills %}
+                            <tr>
+                                <td class="bill-amount">${{ "%.2f"|format(bill.bill_amount) }}</td>
+                                <td>{{ bill.due_date }}</td>
+                                <td class="split-amount">${{ "%.2f"|format(bill.roommate_portion) }}</td>
+                                <td>
+                                    <span class="badge bg-{{ 'warning' if bill.status == 'pending' else 'success' }} status-badge">
+                                        {{ bill.status.title() }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('bill_detail', bill_id=bill.id) }}" class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-4">
+                    <i class="bi bi-inbox" style="font-size: 3rem;"></i>
+                    <p class="mt-2">No bills found. Click "Process New Bills" to get started!</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Pending Bills -->
+{% if pending_bills %}
+<div class="row">
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-exclamation-circle"></i> Pending Bills Requiring Action
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for bill in pending_bills %}
+                    <div class="col-md-6 col-lg-4 mb-3">
+                        <div class="card border-warning">
+                            <div class="card-body">
+                                <h6 class="card-title">
+                                    <span class="bill-amount">${{ "%.2f"|format(bill.bill_amount) }}</span>
+                                    <small class="text-muted">due {{ bill.due_date }}</small>
+                                </h6>
+                                <p class="card-text">
+                                    Roommate owes: <span class="split-amount">${{ "%.2f"|format(bill.roommate_portion) }}</span>
+                                </p>
+                                <div class="d-grid gap-1">
+                                    {% if not bill.pdf_generated %}
+                                    <button class="btn btn-sm btn-warning" onclick="generatePDF({{ bill.id }})">
+                                        <i class="bi bi-file-earmark-pdf"></i> Generate PDF
+                                    </button>
+                                    {% endif %}
+                                    {% if bill.pdf_generated and not bill.pdf_sent %}
+                                    <button class="btn btn-sm btn-info" onclick="sendEmail({{ bill.id }})">
+                                        <i class="bi bi-envelope"></i> Send Email
+                                    </button>
+                                    {% endif %}
+                                    <button class="btn btn-sm btn-success" onclick="generateVenmo({{ bill.id }})">
+                                        <i class="bi bi-credit-card"></i> Venmo Request
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Recent Activity -->
+<div class="row">
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-clock-history"></i> Recent Activity
+            </div>
+            <div class="card-body">
+                {% if recent_activity %}
+                <div class="activity-log">
+                    {% for activity in recent_activity %}
+                    <div class="d-flex align-items-center mb-2 pb-2 border-bottom">
+                        <div class="me-3">
+                            <i class="bi bi-{{ 'check-circle text-success' if 'completed' in activity.action or 'generated' in activity.action else 'info-circle text-info' }}"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <small class="text-muted">{{ activity.timestamp }}</small>
+                            <br>
+                            <strong>{{ activity.action.replace('_', ' ').title() }}</strong>
+                            {% if activity.details %}
+                            <br>
+                            <small>{{ activity.details }}</small>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-3">
+                    <i class="bi bi-clock"></i> No recent activity
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function processBills() {
+    const button = event.target;
+    const originalText = showLoading(button);
+    
+    fetch('/process-bills', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: 'days_back=30'
+    })
+    .then(response => response.json())
+    .then(data => {
+        hideLoading(button, originalText);
+        showToast(data.message, data.success ? 'success' : 'error');
+        if (data.success) {
+            setTimeout(() => location.reload(), 2000);
+        }
+    })
+    .catch(error => {
+        hideLoading(button, originalText);
+        showToast('Error processing bills: ' + error.message, 'error');
+    });
+}
+
+function testConnections() {
+    const button = event.target;
+    const originalText = showLoading(button);
+    
+    const tests = ['gmail', 'mail-app', 'pdf', 'venmo'];
+    let completed = 0;
+    
+    tests.forEach(test => {
+        fetch(`/test-connection/${test}`)
+        .then(response => response.json())
+        .then(data => {
+            completed++;
+            showToast(`${test.toUpperCase()}: ${data.message}`, data.success ? 'success' : 'error');
+            
+            if (completed === tests.length) {
+                hideLoading(button, originalText);
+            }
+        })
+        .catch(error => {
+            completed++;
+            showToast(`${test.toUpperCase()}: Test failed`, 'error');
+            
+            if (completed === tests.length) {
+                hideLoading(button, originalText);
+            }
+        });
+    });
+}
+
+function generatePDF(billId) {
+    const button = event.target;
+    const originalText = showLoading(button);
+    
+    fetch(`/generate-pdf/${billId}`, {method: 'POST'})
+    .then(response => response.json())
+    .then(data => {
+        hideLoading(button, originalText);
+        showToast(data.message, data.success ? 'success' : 'error');
+        if (data.success) {
+            setTimeout(() => location.reload(), 2000);
+        }
+    })
+    .catch(error => {
+        hideLoading(button, originalText);
+        showToast('Error generating PDF: ' + error.message, 'error');
+    });
+}
+
+function sendEmail(billId) {
+    const button = event.target;
+    const originalText = showLoading(button);
+    
+    fetch(`/send-email/${billId}`, {method: 'POST'})
+    .then(response => response.json())
+    .then(data => {
+        hideLoading(button, originalText);
+        showToast(data.message, data.success ? 'success' : 'error');
+        if (data.success) {
+            setTimeout(() => location.reload(), 2000);
+        }
+    })
+    .catch(error => {
+        hideLoading(button, originalText);
+        showToast('Error sending email: ' + error.message, 'error');
+    });
+}
+
+function generateVenmo(billId) {
+    const button = event.target;
+    const originalText = showLoading(button);
+    
+    fetch(`/generate-venmo/${billId}`, {method: 'POST'})
+    .then(response => response.json())
+    .then(data => {
+        hideLoading(button, originalText);
+        if (data.success) {
+            showToast(`Venmo request ready for ${data.summary.roommate_owes}`, 'success');
+            
+            // Show Venmo links
+            const modalHtml = `
+                <div class="modal fade" id="venmoModal" tabindex="-1">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">Venmo Payment Request</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <p><strong>Amount:</strong> $${data.summary.roommate_owes}</p>
+                                <p><strong>Note:</strong> ${data.summary.payment_note}</p>
+                                <div class="mb-3">
+                                    <label class="form-label">Venmo Deep Link:</label>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" value="${data.venmo_url}" readonly>
+                                        <button class="btn btn-outline-secondary" onclick="copyToClipboard('${data.venmo_url}')">Copy</button>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Web Link:</label>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" value="${data.web_url}" readonly>
+                                        <button class="btn btn-outline-secondary" onclick="copyToClipboard('${data.web_url}')">Copy</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <a href="${data.venmo_url}" class="btn btn-success">Open Venmo</a>
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            const modal = new bootstrap.Modal(document.getElementById('venmoModal'));
+            modal.show();
+            
+            document.getElementById('venmoModal').addEventListener('hidden.bs.modal', function () {
+                this.remove();
+                location.reload();
+            });
+        } else {
+            showToast(data.message, 'error');
+        }
+    })
+    .catch(error => {
+        hideLoading(button, originalText);
+        showToast('Error generating Venmo request: ' + error.message, 'error');
+    });
+}
+
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        showToast('Copied to clipboard!', 'success');
+    });
+}
+</script>
+{% endblock %}

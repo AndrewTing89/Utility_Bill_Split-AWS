@@ -11,6 +11,7 @@ set -e
 PROJECT_NAME="pge-bill-automation"
 AWS_REGION="us-west-2"  # Change to your preferred region
 ENVIRONMENT="${1:-dev}"
+AWS_PROFILE="pge-automation"  # Dedicated profile for this project
 
 # Colors for output
 RED='\033[0;31m'
@@ -36,8 +37,8 @@ if ! command -v aws &> /dev/null; then
 fi
 
 # Check if AWS is configured
-if ! aws sts get-caller-identity &> /dev/null; then
-    echo -e "${RED}❌ AWS CLI not configured. Please run 'aws configure' first.${NC}"
+if ! aws --profile ${AWS_PROFILE} sts get-caller-identity &> /dev/null; then
+    echo -e "${RED}❌ AWS CLI not configured for profile '${AWS_PROFILE}'. Please run 'aws configure --profile ${AWS_PROFILE}' first.${NC}"
     exit 1
 fi
 
@@ -56,8 +57,9 @@ fi
 echo -e "${GREEN}✅ Prerequisites check passed${NC}"
 
 # Get AWS account info
-AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+AWS_ACCOUNT_ID=$(aws --profile ${AWS_PROFILE} sts get-caller-identity --query Account --output text)
 echo -e "AWS Account: ${AWS_ACCOUNT_ID}"
+echo -e "AWS Profile: ${AWS_PROFILE}"
 echo ""
 
 # Step 1: Create deployment package
@@ -95,7 +97,7 @@ echo -e "${YELLOW}☁️  Deploying CloudFormation stack...${NC}"
 STACK_NAME="${PROJECT_NAME}-${ENVIRONMENT}"
 
 # Check if stack exists
-if aws cloudformation describe-stacks --stack-name "${STACK_NAME}" --region "${AWS_REGION}" &> /dev/null; then
+if aws --profile ${AWS_PROFILE} cloudformation describe-stacks --stack-name "${STACK_NAME}" --region "${AWS_REGION}" &> /dev/null; then
     echo -e "Stack exists, updating..."
     OPERATION="update-stack"
     WAIT_CONDITION="stack-update-complete"
@@ -106,18 +108,17 @@ else
 fi
 
 # Deploy stack
-aws cloudformation ${OPERATION} \
+aws --profile ${AWS_PROFILE} cloudformation ${OPERATION} \
     --stack-name "${STACK_NAME}" \
-    --template-body file://../cloudformation/pge-automation-stack.yaml \
+    --template-body file://../cloudformation/simple-stack.yaml \
     --parameters \
         ParameterKey=ProjectName,ParameterValue="${PROJECT_NAME}" \
         ParameterKey=Environment,ParameterValue="${ENVIRONMENT}" \
-        ParameterKey=NotificationEmail,ParameterValue="andrewhting@gmail.com" \
     --capabilities CAPABILITY_NAMED_IAM \
     --region "${AWS_REGION}"
 
 echo -e "Waiting for CloudFormation operation to complete..."
-aws cloudformation wait ${WAIT_CONDITION} \
+aws --profile ${AWS_PROFILE} cloudformation wait ${WAIT_CONDITION} \
     --stack-name "${STACK_NAME}" \
     --region "${AWS_REGION}"
 
@@ -128,7 +129,7 @@ echo -e "${YELLOW}⚡ Updating Lambda function code...${NC}"
 
 FUNCTION_NAME="${PROJECT_NAME}-automation-${ENVIRONMENT}"
 
-aws lambda update-function-code \
+aws --profile ${AWS_PROFILE} lambda update-function-code \
     --function-name "${FUNCTION_NAME}" \
     --zip-file "fileb://${TEMP_DIR}/${DEPLOYMENT_ZIP}" \
     --region "${AWS_REGION}" > /dev/null
@@ -138,19 +139,19 @@ echo -e "${GREEN}✅ Lambda function code updated${NC}"
 # Step 4: Get stack outputs
 echo -e "${YELLOW}📊 Getting deployment information...${NC}"
 
-LAMBDA_ARN=$(aws cloudformation describe-stacks \
+LAMBDA_ARN=$(aws --profile ${AWS_PROFILE} cloudformation describe-stacks \
     --stack-name "${STACK_NAME}" \
     --region "${AWS_REGION}" \
     --query 'Stacks[0].Outputs[?OutputKey==`LambdaFunctionArn`].OutputValue' \
     --output text)
 
-S3_BUCKET=$(aws cloudformation describe-stacks \
+S3_BUCKET=$(aws --profile ${AWS_PROFILE} cloudformation describe-stacks \
     --stack-name "${STACK_NAME}" \
     --region "${AWS_REGION}" \
     --query 'Stacks[0].Outputs[?OutputKey==`S3BucketName`].OutputValue' \
     --output text)
 
-DASHBOARD_URL=$(aws cloudformation describe-stacks \
+DASHBOARD_URL=$(aws --profile ${AWS_PROFILE} cloudformation describe-stacks \
     --stack-name "${STACK_NAME}" \
     --region "${AWS_REGION}" \
     --query 'Stacks[0].Outputs[?OutputKey==`DashboardURL`].OutputValue' \
@@ -159,7 +160,7 @@ DASHBOARD_URL=$(aws cloudformation describe-stacks \
 # Step 5: Test the deployment
 echo -e "${YELLOW}🧪 Testing deployment...${NC}"
 
-TEST_RESULT=$(aws lambda invoke \
+TEST_RESULT=$(aws --profile ${AWS_PROFILE} lambda invoke \
     --function-name "${FUNCTION_NAME}" \
     --payload '{"test_mode": true, "manual_trigger": true}' \
     --region "${AWS_REGION}" \

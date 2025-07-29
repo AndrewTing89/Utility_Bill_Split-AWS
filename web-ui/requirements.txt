@@ -1,0 +1,10 @@
+# Web application requirements for AWS deployment
+Flask>=2.3.0
+boto3>=1.28.0
+botocore>=1.31.0
+
+# Security and utilities
+Werkzeug>=2.3.0
+
+# Date/time handling
+python-dateutil>=2.8.0

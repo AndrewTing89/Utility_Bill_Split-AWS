@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block title %}Error - PG&E Bill Split{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card border-danger">
+                <div class="card-header bg-danger text-white">
+                    <h4 class="mb-0">
+                        <i class="bi bi-exclamation-triangle"></i> Error
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <div class="text-center mb-4">
+                        <i class="bi bi-exclamation-circle text-danger" style="font-size: 4rem;"></i>
+                    </div>
+                    
+                    <h5 class="text-center mb-3">Something went wrong</h5>
+                    
+                    {% if error %}
+                    <div class="alert alert-danger">
+                        <strong>Error Details:</strong><br>
+                        {{ error }}
+                    </div>
+                    {% endif %}
+                    
+                    <div class="text-center">
+                        <a href="{{ url_for('dashboard') }}" class="btn btn-primary me-2">
+                            <i class="bi bi-house"></i> Go to Dashboard
+                        </a>
+                        <button onclick="history.back()" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left"></i> Go Back
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="bi bi-question-circle"></i> Troubleshooting
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <h6>Common Issues:</h6>
+                    <ul>
+                        <li><strong>Gmail Authentication:</strong> Try re-authenticating through the settings page</li>
+                        <li><strong>PDF Generation:</strong> Ensure wkhtmltopdf is installed via Homebrew</li>
+                        <li><strong>Email Sending:</strong> Check that Mac Mail app is configured and running</li>
+                        <li><strong>Database Errors:</strong> The SQLite database may need to be recreated</li>
+                    </ul>
+                    
+                    <h6>Next Steps:</h6>
+                    <ol>
+                        <li>Visit the <a href="{{ url_for('settings_page') }}">Settings page</a> to test connections</li>
+                        <li>Check the application logs for more details</li>
+                        <li>Restart the application if problems persist</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

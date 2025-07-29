@@ -18,8 +18,8 @@ python-dateutil>=2.8.0
 # JSON handling
 simplejson>=3.19.0
 
-# Email parsing
-email-mime-parser>=1.0.0
+# Email parsing (using built-in email package instead)
+# email-mime-parser>=1.0.0
 
 # Google APIs (for Gmail)
 google-api-python-client>=2.100.0

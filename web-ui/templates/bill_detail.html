@@ -1,0 +1,403 @@
+{% extends "base.html" %}
+
+{% block title %}Bill Details - PG&E Bill Split{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-receipt"></i> Bill Details</h2>
+    <a href="{{ url_for('bills_list') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Back to Bills
+    </a>
+</div>
+
+<div class="row">
+    <!-- Bill Information -->
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-info-circle"></i> Bill Information
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless">
+                    <tr>
+                        <td><strong>Total Amount:</strong></td>
+                        <td class="bill-amount">${{ "%.2f"|format(bill.bill_amount) }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Due Date:</strong></td>
+                        <td>{{ bill.due_date }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Roommate Share:</strong></td>
+                        <td class="split-amount">${{ "%.2f"|format(bill.roommate_portion) }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Your Share:</strong></td>
+                        <td class="text-muted">${{ "%.2f"|format(bill.my_portion) }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Status:</strong></td>
+                        <td>
+                            <span class="badge bg-{{ 'warning' if bill.status == 'pending' else 'success' }}">
+                                {{ bill.status.title() }}
+                            </span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>Processed:</strong></td>
+                        <td>{{ bill.processed_date or 'N/A' }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Processing Status -->
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-list-check"></i> Processing Status
+            </div>
+            <div class="card-body">
+                <div class="list-group list-group-flush">
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <i class="bi bi-file-earmark-pdf me-2"></i>
+                            PDF Generated
+                        </div>
+                        <span class="badge bg-{{ 'success' if bill.pdf_generated else 'secondary' }}">
+                            {{ 'Yes' if bill.pdf_generated else 'No' }}
+                        </span>
+                    </div>
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <i class="bi bi-envelope me-2"></i>
+                            Email Sent
+                        </div>
+                        <span class="badge bg-{{ 'success' if bill.pdf_sent else 'secondary' }}">
+                            {{ 'Yes' if bill.pdf_sent else 'No' }}
+                        </span>
+                    </div>
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <i class="bi bi-credit-card me-2"></i>
+                            Venmo Request
+                        </div>
+                        <span class="badge bg-{{ 'success' if bill.venmo_sent else 'secondary' }}">
+                            {{ 'Generated' if bill.venmo_sent else 'Pending' }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Actions -->
+<div class="row">
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-lightning-charge"></i> Actions
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3 mb-2">
+                        {% if not bill.pdf_generated %}
+                        <button class="btn btn-warning w-100" onclick="generatePDF({{ bill.id }})">
+                            <i class="bi bi-file-earmark-pdf"></i> Generate PDF
+                        </button>
+                        {% else %}
+                        <a href="{{ url_for('download_pdf', bill_id=bill.id) }}" class="btn btn-success w-100">
+                            <i class="bi bi-download"></i> Download PDF
+                        </a>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="col-md-3 mb-2">
+                        {% if bill.pdf_generated and not bill.pdf_sent %}
+                        <button class="btn btn-info w-100" onclick="sendEmail({{ bill.id }})">
+                            <i class="bi bi-envelope"></i> Send Email
+                        </button>
+                        {% else %}
+                        <button class="btn btn-outline-info w-100" disabled>
+                            <i class="bi bi-envelope-check"></i> 
+                            {{ 'Email Sent' if bill.pdf_sent else 'Generate PDF First' }}
+                        </button>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="col-md-3 mb-2">
+                        {% if bill.pdf_generated %}
+                        <button class="btn btn-outline-warning w-100" onclick="testEmail({{ bill.id }})">
+                            <i class="bi bi-bug"></i> Test Email
+                        </button>
+                        {% else %}
+                        <button class="btn btn-outline-secondary w-100" disabled>
+                            <i class="bi bi-bug"></i> Test Email
+                        </button>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="col-md-3 mb-2">
+                        <button class="btn btn-success w-100" onclick="generateVenmo({{ bill.id }})">
+                            <i class="bi bi-credit-card"></i> Create Venmo Request
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Email Status Display -->
+                <div id="emailStatus" class="mt-3" style="display: none;">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> 
+                        <span id="emailStatusText"></span>
+                        <div id="emailDebugInfo" class="mt-2 small" style="display: none;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Email Information -->
+<div class="row">
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-envelope-open"></i> Original Email
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless">
+                    <tr>
+                        <td><strong>Subject:</strong></td>
+                        <td>{{ bill.email_subject or 'N/A' }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Date:</strong></td>
+                        <td>{{ bill.email_date or 'N/A' }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Email ID:</strong></td>
+                        <td><code>{{ bill.email_id or 'N/A' }}</code></td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Venmo Information -->
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-credit-card"></i> Venmo Details
+            </div>
+            <div class="card-body">
+                {% if bill.venmo_link %}
+                <div class="mb-3">
+                    <label class="form-label">Venmo Link:</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" value="{{ bill.venmo_link }}" readonly>
+                        <button class="btn btn-outline-secondary" onclick="copyToClipboard('{{ bill.venmo_link }}')">
+                            <i class="bi bi-clipboard"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="d-grid">
+                    <a href="{{ bill.venmo_link }}" class="btn btn-success">
+                        <i class="bi bi-credit-card"></i> Open Venmo
+                    </a>
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-3">
+                    <i class="bi bi-credit-card" style="font-size: 2rem;"></i>
+                    <p class="mt-2">No Venmo request generated yet</p>
+                    <button class="btn btn-success" onclick="generateVenmo({{ bill.id }})">
+                        Create Venmo Request
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Processing Log -->
+<div class="row">
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-clock-history"></i> Processing History
+            </div>
+            <div class="card-body">
+                {% if bill_log %}
+                <div class="timeline">
+                    {% for entry in bill_log %}
+                    <div class="d-flex mb-3">
+                        <div class="me-3 mt-1">
+                            <i class="bi bi-{{ 'check-circle text-success' if 'completed' in entry.action or 'generated' in entry.action else 'info-circle text-info' }}"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <strong>{{ entry.action.replace('_', ' ').title() }}</strong>
+                                    {% if entry.details %}
+                                    <p class="mb-1 text-muted">{{ entry.details }}</p>
+                                    {% endif %}
+                                </div>
+                                <small class="text-muted">{{ entry.timestamp }}</small>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-3">
+                    <i class="bi bi-clock"></i> No processing history available
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Notes -->
+<div class="row">
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-card-text"></i> Notes
+            </div>
+            <div class="card-body">
+                {% if bill.notes %}
+                <p>{{ bill.notes }}</p>
+                {% else %}
+                <p class="text-muted">No notes available for this bill.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function generatePDF(billId) {
+    const button = event.target;
+    const originalText = showLoading(button);
+    
+    fetch(`/generate-pdf/${billId}`, {method: 'POST'})
+    .then(response => response.json())
+    .then(data => {
+        hideLoading(button, originalText);
+        showToast(data.message, data.success ? 'success' : 'error');
+        if (data.success) {
+            setTimeout(() => location.reload(), 2000);
+        }
+    })
+    .catch(error => {
+        hideLoading(button, originalText);
+        showToast('Error generating PDF: ' + error.message, 'error');
+    });
+}
+
+function sendEmail(billId) {
+    const button = event.target;
+    const originalText = showLoading(button);
+    
+    fetch(`/send-email/${billId}`, {method: 'POST'})
+    .then(response => response.json())
+    .then(data => {
+        hideLoading(button, originalText);
+        showToast(data.message, data.success ? 'success' : 'error');
+        if (data.success) {
+            setTimeout(() => location.reload(), 2000);
+        }
+    })
+    .catch(error => {
+        hideLoading(button, originalText);
+        showToast('Error sending email: ' + error.message, 'error');
+    });
+}
+
+function testEmail(billId) {
+    const button = event.target;
+    const originalText = showLoading(button);
+    
+    fetch(`/test-email/${billId}`, {method: 'POST'})
+    .then(response => response.json())
+    .then(data => {
+        hideLoading(button, originalText);
+        
+        if (data.success) {
+            showToast('Test email sent successfully!', 'success');
+            showEmailStatus(`Test email sent at ${data.last_sent}`, data.debug_info);
+        } else {
+            showToast(`Test email failed: ${data.message}`, 'error');
+            showEmailStatus(`Test email failed`, data.debug_info);
+        }
+    })
+    .catch(error => {
+        hideLoading(button, originalText);
+        showToast(`Test email error: ${error.message}`, 'error');
+    });
+}
+
+function showEmailStatus(message, debugInfo) {
+    const statusDiv = document.getElementById('emailStatus');
+    const statusText = document.getElementById('emailStatusText');
+    const debugDiv = document.getElementById('emailDebugInfo');
+    
+    statusText.textContent = message;
+    
+    if (debugInfo) {
+        debugDiv.innerHTML = `
+            <strong>Debug Info:</strong><br>
+            • Recipient: ${debugInfo.recipient}<br>
+            • Sender: ${debugInfo.sender}<br>
+            • PDF exists: ${debugInfo.pdf_exists ? 'Yes' : 'No'}<br>
+            • PDF size: ${debugInfo.pdf_size} bytes<br>
+            • Test mode: ${debugInfo.test_mode ? 'Enabled' : 'Disabled'}<br>
+            • Email notifications: ${debugInfo.email_notifications_enabled ? 'Enabled' : 'Disabled'}
+        `;
+        debugDiv.style.display = 'block';
+    } else {
+        debugDiv.style.display = 'none';
+    }
+    
+    statusDiv.style.display = 'block';
+    
+    // Auto-hide after 10 seconds
+    setTimeout(() => {
+        statusDiv.style.display = 'none';
+    }, 10000);
+}
+
+function generateVenmo(billId) {
+    const button = event.target;
+    const originalText = showLoading(button);
+    
+    fetch(`/generate-venmo/${billId}`, {method: 'POST'})
+    .then(response => response.json())
+    .then(data => {
+        hideLoading(button, originalText);
+        if (data.success) {
+            showToast(`Venmo request ready for $${data.summary.roommate_owes}`, 'success');
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            showToast(data.message, 'error');
+        }
+    })
+    .catch(error => {
+        hideLoading(button, originalText);
+        showToast('Error generating Venmo request: ' + error.message, 'error');
+    });
+}
+
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        showToast('Copied to clipboard!', 'success');
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,437 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - PG&E Bill Split{% endblock %}
+
+{% block content %}
+<h2><i class="bi bi-gear"></i> Settings</h2>
+<p class="text-muted">Current system configuration and connection tests</p>
+
+<div class="row">
+    <!-- Account Settings -->
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-person-circle"></i> Account Configuration
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless">
+                    <tr>
+                        <td><strong>Gmail Account:</strong></td>
+                        <td>{{ settings.gmail_user }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Your Email:</strong></td>
+                        <td>{{ settings.my_email }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Roommate Email:</strong></td>
+                        <td>{{ settings.roommate_email }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Your Phone:</strong></td>
+                        <td>{{ settings.my_phone if settings.my_phone and settings.my_phone != '+1234567890' else 'Not configured' }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Roommate Phone:</strong></td>
+                        <td><span class="text-muted">Not needed - using email only</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Your Venmo:</strong></td>
+                        <td>@{{ settings.my_venmo }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Roommate Venmo:</strong></td>
+                        <td>@{{ settings.roommate_venmo }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Split Configuration -->
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-pie-chart"></i> Bill Split Configuration
+            </div>
+            <div class="card-body">
+                <div class="text-center mb-3">
+                    <div class="row">
+                        <div class="col-6">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h4 class="card-title text-info">{{ settings.roommate_split }}</h4>
+                                    <p class="card-text">Roommate</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h4 class="card-title text-secondary">{{ settings.my_split }}</h4>
+                                    <p class="card-text">You</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <p class="text-muted text-center">
+                    <small>Split ratio configured in environment variables</small>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Feature Settings -->
+<div class="row">
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-toggles"></i> Feature Settings
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3 mb-3">
+                        <div class="card text-center h-100">
+                            <div class="card-body">
+                                <i class="bi bi-shield-{{ 'check text-warning' if settings.test_mode else 'x text-success' }}" style="font-size: 2rem;"></i>
+                                <h6 class="card-title mt-2">Test Mode</h6>
+                                <span class="badge bg-{{ 'warning' if settings.test_mode else 'success' }}">
+                                    {{ 'Enabled' if settings.test_mode else 'Disabled' }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3 mb-3">
+                        <div class="card text-center h-100">
+                            <div class="card-body">
+                                <i class="bi bi-envelope-{{ 'check text-success' if settings.email_notifications else 'x text-secondary' }}" style="font-size: 2rem;"></i>
+                                <h6 class="card-title mt-2">Email Notifications</h6>
+                                <span class="badge bg-{{ 'success' if settings.email_notifications else 'secondary' }}">
+                                    {{ 'Enabled' if settings.email_notifications else 'Disabled' }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3 mb-3">
+                        <div class="card text-center h-100">
+                            <div class="card-body">
+                                <i class="bi bi-file-earmark-pdf-{{ 'fill text-success' if settings.pdf_generation else ' text-secondary' }}" style="font-size: 2rem;"></i>
+                                <h6 class="card-title mt-2">PDF Generation</h6>
+                                <span class="badge bg-{{ 'success' if settings.pdf_generation else 'secondary' }}">
+                                    {{ 'Enabled' if settings.pdf_generation else 'Disabled' }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3 mb-3">
+                        <div class="card text-center h-100">
+                            <div class="card-body">
+                                <i class="bi bi-box-arrow-up-{{ 'fill text-success' if settings.auto_open else ' text-secondary' }}" style="font-size: 2rem;"></i>
+                                <h6 class="card-title mt-2">Auto-open Links</h6>
+                                <span class="badge bg-{{ 'success' if settings.auto_open else 'secondary' }}">
+                                    {{ 'Enabled' if settings.auto_open else 'Disabled' }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3 mb-3">
+                        <div class="card text-center h-100">
+                            <div class="card-body">
+                                <i class="bi bi-phone-{{ 'fill text-success' if settings.text_messaging else ' text-secondary' }}" style="font-size: 2rem;"></i>
+                                <h6 class="card-title mt-2">Text Messaging</h6>
+                                <span class="badge bg-{{ 'success' if settings.text_messaging else 'secondary' }}">
+                                    {{ 'Enabled' if settings.text_messaging else 'Disabled' }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Monthly Automation Schedule -->
+<div class="row">
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-calendar-event"></i> Monthly Automation Schedule
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-8">
+                        <h6>Automation Status:</h6>
+                        <div class="d-flex align-items-center mb-2">
+                            {% if schedule_status.loaded %}
+                            <i class="bi bi-check-circle-fill text-success me-2"></i>
+                            <span class="text-success"><strong>ACTIVE</strong> - Runs automatically on the 5th of each month at 9:00 AM</span>
+                            {% else %}
+                            <i class="bi bi-x-circle-fill text-warning me-2"></i>
+                            <span class="text-warning"><strong>INACTIVE</strong> - Manual processing required</span>
+                            {% endif %}
+                        </div>
+                        
+                        {% if schedule_status.loaded %}
+                        <div class="alert alert-success">
+                            <i class="bi bi-info-circle"></i>
+                            <strong>Next Run:</strong> Your bills will be processed automatically on the 5th of next month. 
+                            The system will scan Gmail, generate PDFs, send emails, and create Venmo requests.
+                        </div>
+                        {% else %}
+                        <div class="alert alert-info">
+                            <i class="bi bi-lightbulb"></i>
+                            <strong>Enable Automation:</strong> Install the monthly schedule to process bills automatically 
+                            without manual intervention.
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="d-grid gap-2">
+                            {% if schedule_status.loaded %}
+                            <button class="btn btn-warning" onclick="manageSchedule('uninstall')">
+                                <i class="bi bi-trash"></i> Disable Automation
+                            </button>
+                            <button class="btn btn-info" onclick="manageSchedule('test')">
+                                <i class="bi bi-play-circle"></i> Test Run Now
+                            </button>
+                            {% else %}
+                            <button class="btn btn-success" onclick="manageSchedule('install')">
+                                <i class="bi bi-calendar-plus"></i> Enable Automation
+                            </button>
+                            {% endif %}
+                            <button class="btn btn-outline-secondary" onclick="manageSchedule('status')">
+                                <i class="bi bi-info-circle"></i> Check Status
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Connection Tests -->
+<div class="row">
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-wifi"></i> Connection Tests
+            </div>
+            <div class="card-body">
+                <p class="text-muted mb-3">Test the various system components to ensure everything is working correctly.</p>
+                
+                <div class="row">
+                    <div class="col-md-3 mb-2">
+                        <button class="btn btn-outline-primary w-100" onclick="testConnection('gmail')">
+                            <i class="bi bi-envelope"></i> Test Gmail
+                        </button>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <button class="btn btn-outline-info w-100" onclick="testConnection('mail-app')">
+                            <i class="bi bi-app"></i> Test Mail App
+                        </button>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <button class="btn btn-outline-warning w-100" onclick="testConnection('pdf')">
+                            <i class="bi bi-file-earmark-pdf"></i> Test PDF Gen
+                        </button>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <button class="btn btn-outline-success w-100" onclick="testConnection('venmo')">
+                            <i class="bi bi-credit-card"></i> Test Venmo
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="mt-3">
+                    <button class="btn btn-primary" onclick="testAllConnections()">
+                        <i class="bi bi-check-all"></i> Test All Components
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Environment Information -->
+<div class="row">
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-info-circle"></i> Environment Information
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i>
+                    <strong>Configuration Files:</strong> Settings are loaded from environment variables and the <code>.env</code> file. 
+                    To modify these settings, edit the <code>.env</code> file in the project root directory.
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>File Locations:</h6>
+                        <ul class="list-unstyled">
+                            <li><code>.env</code> - Environment variables</li>
+                            <li><code>credentials.json</code> - Gmail API credentials</li>
+                            <li><code>data/bills.db</code> - Bill database</li>
+                            <li><code>data/pdfs/</code> - Generated PDFs</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Automation Schedule:</h6>
+                        <ul class="list-unstyled">
+                            <li><i class="bi bi-calendar"></i> <strong>5th of each month</strong> at 9:00 AM</li>
+                            <li><i class="bi bi-gear"></i> Configured via launchd (Mac)</li>
+                            <li><i class="bi bi-clock"></i> Processes bills automatically</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function testConnection(component) {
+    const button = event.target;
+    const originalText = showLoading(button);
+    
+    fetch(`/test-connection/${component}`)
+    .then(response => response.json())
+    .then(data => {
+        hideLoading(button, originalText);
+        showToast(`${component.toUpperCase()}: ${data.message}`, data.success ? 'success' : 'error');
+    })
+    .catch(error => {
+        hideLoading(button, originalText);
+        showToast(`${component.toUpperCase()}: Test failed - ${error.message}`, 'error');
+    });
+}
+
+function testAllConnections() {
+    const button = event.target;
+    const originalText = showLoading(button);
+    
+    const tests = ['gmail', 'mail-app', 'pdf', 'venmo'];
+    let completed = 0;
+    let allPassed = true;
+    
+    tests.forEach(test => {
+        fetch(`/test-connection/${test}`)
+        .then(response => response.json())
+        .then(data => {
+            completed++;
+            if (!data.success) allPassed = false;
+            showToast(`${test.toUpperCase()}: ${data.message}`, data.success ? 'success' : 'error');
+            
+            if (completed === tests.length) {
+                hideLoading(button, originalText);
+                
+                setTimeout(() => {
+                    showToast(
+                        allPassed ? 'All connection tests passed!' : 'Some tests failed - check individual results', 
+                        allPassed ? 'success' : 'error'
+                    );
+                }, 1000);
+            }
+        })
+        .catch(error => {
+            completed++;
+            allPassed = false;
+            showToast(`${test.toUpperCase()}: Test failed - ${error.message}`, 'error');
+            
+            if (completed === tests.length) {
+                hideLoading(button, originalText);
+                setTimeout(() => {
+                    showToast('Some tests failed - check individual results', 'error');
+                }, 1000);
+            }
+        });
+    });
+}
+
+function manageSchedule(action) {
+    const button = event.target;
+    const originalText = showLoading(button);
+    
+    // Show confirmation for destructive actions
+    if (action === 'uninstall') {
+        if (!confirm('Are you sure you want to disable monthly automation? You\'ll need to process bills manually.')) {
+            hideLoading(button, originalText);
+            return;
+        }
+    }
+    
+    if (action === 'install') {
+        if (!confirm('This will enable automatic bill processing on the 5th of each month. Continue?')) {
+            hideLoading(button, originalText);
+            return;
+        }
+    }
+    
+    fetch(`/schedule/${action}`, {method: 'POST'})
+    .then(response => response.json())
+    .then(data => {
+        hideLoading(button, originalText);
+        
+        if (data.success) {
+            showToast(data.message, 'success');
+            
+            // Show detailed output for test runs
+            if (action === 'test' && data.output) {
+                const modalHtml = `
+                    <div class="modal fade" id="testOutputModal" tabindex="-1">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">
+                                        <i class="bi bi-play-circle"></i> Automation Test Results
+                                    </h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <pre style="max-height: 400px; overflow-y: auto; font-size: 0.9em;">${data.output}</pre>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                document.body.insertAdjacentHTML('beforeend', modalHtml);
+                const modal = new bootstrap.Modal(document.getElementById('testOutputModal'));
+                modal.show();
+                
+                document.getElementById('testOutputModal').addEventListener('hidden.bs.modal', function () {
+                    this.remove();
+                });
+            }
+            
+            // Reload page for install/uninstall to show updated status
+            if (action === 'install' || action === 'uninstall') {
+                setTimeout(() => location.reload(), 2000);
+            }
+        } else {
+            showToast(`Schedule ${action} failed: ${data.message}`, 'error');
+        }
+    })
+    .catch(error => {
+        hideLoading(button, originalText);
+        showToast(`Schedule ${action} error: ${error.message}`, 'error');
+    });
+}
+</script>
+{% endblock %}
