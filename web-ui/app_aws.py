@@ -191,8 +191,18 @@ def dashboard():
                              settings=settings)
     except Exception as e:
         logger.error(f"Dashboard error: {e}")
-        return render_template('error.html', 
-                             error=f"Dashboard failed to load: {str(e)}"), 500
+        # Return with default values to prevent template errors
+        return render_template('dashboard.html',
+                             bills=[],
+                             stats={
+                                 'total_bills': 0,
+                                 'total_amount': 0,
+                                 'total_roommate_portion': 0,
+                                 'pending_bills': 0,
+                                 'sms_sent': 0,
+                                 'average_bill': 0
+                             },
+                             settings={})
 
 @app.route('/bills')
 def bills():
