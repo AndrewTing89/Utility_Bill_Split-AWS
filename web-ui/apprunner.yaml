@@ -4,11 +4,10 @@ build:
   commands:
     build:
       - echo "Building PG&E Bill Split Web App"
-      - cd web-ui
-      - pip install --no-cache-dir -r requirements.txt
+      - pip install --no-cache-dir -r web-ui/requirements.txt
 run:
   runtime-version: 3.9
-  command: cd web-ui && python app_aws.py
+  command: python web-ui/app_aws.py
   network:
     port: 8080
     env: PORT
