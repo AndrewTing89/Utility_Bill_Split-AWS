@@ -123,26 +123,38 @@ db = AWSBillDatabase()
 @app.route('/')
 def dashboard():
     """Main dashboard"""
-    bills = db.get_all_bills()
-    settings = load_settings()
-    
-    # Calculate summary statistics
-    total_bills = len(bills) if bills else 0
-    total_amount = sum(bill['amount'] for bill in bills) if bills else 0
-    total_roommate_portion = sum(bill['roommate_portion'] for bill in bills) if bills else 0
-    
-    summary = {
-        'total_bills': total_bills,
-        'total_amount': total_amount,
-        'total_roommate_portion': total_roommate_portion,
-        'pending_bills': 0,  # For now, no pending logic
-        'average_bill': total_amount / total_bills if total_bills > 0 else 0
-    }
-    
-    return render_template('dashboard.html', 
-                         bills=bills[:5],  # Show latest 5 bills
-                         stats=summary,
-                         settings=settings)
+    try:
+        logger.info("Loading dashboard...")
+        bills = db.get_all_bills()
+        logger.info(f"Found {len(bills) if bills else 0} bills")
+        
+        settings = load_settings()
+        logger.info("Settings loaded")
+        
+        # Calculate summary statistics
+        total_bills = len(bills) if bills else 0
+        total_amount = sum(bill['amount'] for bill in bills) if bills else 0
+        total_roommate_portion = sum(bill['roommate_portion'] for bill in bills) if bills else 0
+        
+        summary = {
+            'total_bills': total_bills,
+            'total_amount': total_amount,
+            'total_roommate_portion': total_roommate_portion,
+            'pending_bills': 0,  # For now, no pending logic
+            'pdfs_generated': total_bills,  # One PDF per bill
+            'pdfs_sent': total_bills,  # One email per bill
+            'average_bill': total_amount / total_bills if total_bills > 0 else 0
+        }
+        
+        logger.info("Rendering dashboard template...")
+        return render_template('dashboard.html', 
+                             bills=bills[:5] if bills else [],  # Show latest 5 bills
+                             stats=summary,
+                             settings=settings)
+    except Exception as e:
+        logger.error(f"Dashboard error: {e}")
+        return render_template('error.html', 
+                             error=f"Dashboard failed to load: {str(e)}"), 500
 
 @app.route('/bills')
 def bills():
