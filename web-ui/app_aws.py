@@ -9,6 +9,7 @@ import os
 import json
 import logging
 from datetime import datetime
+from decimal import Decimal
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 import boto3
 from botocore.exceptions import ClientError
@@ -46,12 +47,25 @@ class AWSBillDatabase:
             # Convert to expected format and sort by date
             formatted_bills = []
             for bill in bills:
+                # Handle Decimal conversion properly
+                amount = bill.get('amount', 0)
+                roommate_portion = bill.get('roommate_portion', 0)  
+                my_portion = bill.get('my_portion', 0)
+                
+                # Convert Decimal to float if needed
+                if isinstance(amount, Decimal):
+                    amount = float(amount)
+                if isinstance(roommate_portion, Decimal):
+                    roommate_portion = float(roommate_portion)
+                if isinstance(my_portion, Decimal):
+                    my_portion = float(my_portion)
+                
                 formatted_bills.append({
                     'id': bill.get('bill_id', ''),
-                    'amount': float(bill.get('amount', 0)),
+                    'amount': amount,
                     'due_date': bill.get('due_date', ''),
-                    'roommate_portion': float(bill.get('roommate_portion', 0)),
-                    'my_portion': float(bill.get('my_portion', 0)),
+                    'roommate_portion': roommate_portion,
+                    'my_portion': my_portion,
                     'processed_date': bill.get('processed_date', ''),
                     'status': bill.get('status', 'processed')
                 })
@@ -75,12 +89,26 @@ class AWSBillDatabase:
             response = self.table.get_item(Key={'bill_id': bill_id})
             if 'Item' in response:
                 bill = response['Item']
+                
+                # Handle Decimal conversion properly
+                amount = bill.get('amount', 0)
+                roommate_portion = bill.get('roommate_portion', 0)  
+                my_portion = bill.get('my_portion', 0)
+                
+                # Convert Decimal to float if needed
+                if isinstance(amount, Decimal):
+                    amount = float(amount)
+                if isinstance(roommate_portion, Decimal):
+                    roommate_portion = float(roommate_portion)
+                if isinstance(my_portion, Decimal):
+                    my_portion = float(my_portion)
+                
                 return {
                     'id': bill.get('bill_id', ''),
-                    'amount': float(bill.get('amount', 0)),
+                    'amount': amount,
                     'due_date': bill.get('due_date', ''),
-                    'roommate_portion': float(bill.get('roommate_portion', 0)),
-                    'my_portion': float(bill.get('my_portion', 0)),
+                    'roommate_portion': roommate_portion,
+                    'my_portion': my_portion,
                     'processed_date': bill.get('processed_date', ''),
                     'status': bill.get('status', 'processed'),
                     'email_body': bill.get('email_body', '')
@@ -389,6 +417,27 @@ def test_connections(component=None):
             results['settings'] = f'Error: {str(e)}'
     
     return jsonify(results)
+
+@app.route('/api/debug-bills')
+def debug_bills():
+    """Debug endpoint to see raw DynamoDB data"""
+    try:
+        response = db.table.scan()
+        items = response.get('Items', [])
+        
+        # Return raw data for debugging
+        debug_info = {
+            'raw_items_count': len(items),
+            'raw_items': items,
+            'processed_bills': db.get_all_bills()
+        }
+        
+        return jsonify(debug_info)
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'type': str(type(e))
+        }), 500
 
 @app.route('/health')
 def health_check():
