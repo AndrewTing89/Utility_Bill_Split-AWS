@@ -423,28 +423,32 @@ def create_venmo_request():
                 'amount': bill['roommate_portion']
             })
         
-        # Send SMS via SNS
+        # Send SMS via email-to-SMS gateway
         try:
-            import boto3
-            sns_client = boto3.client('sns', region_name='us-west-2')
+            import smtplib
+            from email.mime.text import MIMEText
+            
+            # Your working SMS gateway
+            gmail_user = 'andrewhting@gmail.com'
+            gmail_app_password = 'pgcv uphl aqrm rlqe'  # Your Gmail app password
+            sms_gateway = '9298884132@vtext.com'  # Working gateway from test #12
             
             bill_month = datetime.strptime(bill['due_date'], '%m/%d/%Y').strftime('%B %Y')
-            message = f"💰 PG&E Bill - {bill_month}\n"
-            message += f"Amount: ${bill['roommate_portion']:.2f}\n"
-            message += f"Venmo: {venmo_url}"
+            message_body = f"💰 PG&E Bill - {bill_month}\nAmount: ${bill['roommate_portion']:.2f}\n{venmo_url}"
             
-            response = sns_client.publish(
-                PhoneNumber=settings.get('my_phone', '+19298884132'),
-                Message=message,
-                MessageAttributes={
-                    'AWS.SNS.SMS.SMSType': {
-                        'DataType': 'String',
-                        'StringValue': 'Transactional'
-                    }
-                }
-            )
+            # Create and send email-to-SMS
+            msg = MIMEText(message_body)
+            msg['From'] = gmail_user
+            msg['To'] = sms_gateway
+            msg['Subject'] = ''  # Empty subject for SMS
             
-            logger.info(f"SMS sent successfully: {response['MessageId']}")
+            server = smtplib.SMTP('smtp.gmail.com', 587)
+            server.starttls()
+            server.login(gmail_user, gmail_app_password)
+            server.send_message(msg)
+            server.quit()
+            
+            logger.info(f"SMS sent successfully via {sms_gateway}")
             
             return jsonify({
                 'success': True,
@@ -452,7 +456,7 @@ def create_venmo_request():
                 'venmo_url': venmo_url,
                 'amount': bill['roommate_portion'],
                 'sms_sent': True,
-                'message_id': response['MessageId']
+                'sms_gateway': sms_gateway
             })
             
         except Exception as e:
