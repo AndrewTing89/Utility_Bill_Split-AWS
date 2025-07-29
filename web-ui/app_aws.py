@@ -423,13 +423,49 @@ def create_venmo_request():
                 'amount': bill['roommate_portion']
             })
         
-        # TODO: Implement SMS sending via SNS
-        return jsonify({
-            'success': True,
-            'message': 'Venmo request created and sent',
-            'venmo_url': venmo_url,
-            'amount': bill['roommate_portion']
-        })
+        # Send SMS via SNS
+        try:
+            import boto3
+            sns_client = boto3.client('sns', region_name='us-west-2')
+            
+            bill_month = datetime.strptime(bill['due_date'], '%m/%d/%Y').strftime('%B %Y')
+            message = f"💰 PG&E Bill - {bill_month}\n"
+            message += f"Amount: ${bill['roommate_portion']:.2f}\n"
+            message += f"Venmo: {venmo_url}"
+            
+            response = sns_client.publish(
+                PhoneNumber=settings.get('my_phone', '+19298884132'),
+                Message=message,
+                MessageAttributes={
+                    'AWS.SNS.SMS.SMSType': {
+                        'DataType': 'String',
+                        'StringValue': 'Transactional'
+                    }
+                }
+            )
+            
+            logger.info(f"SMS sent successfully: {response['MessageId']}")
+            
+            return jsonify({
+                'success': True,
+                'message': 'Venmo request created and SMS sent!',
+                'venmo_url': venmo_url,
+                'amount': bill['roommate_portion'],
+                'sms_sent': True,
+                'message_id': response['MessageId']
+            })
+            
+        except Exception as e:
+            logger.error(f"SMS sending failed: {e}")
+            # Still return success but note SMS failed
+            return jsonify({
+                'success': True,
+                'message': 'Venmo request created (SMS failed)',
+                'venmo_url': venmo_url,
+                'amount': bill['roommate_portion'],
+                'sms_sent': False,
+                'sms_error': str(e)
+            })
         
     except Exception as e:
         logger.error(f"Error creating Venmo request: {e}")
