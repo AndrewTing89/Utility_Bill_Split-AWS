@@ -67,7 +67,11 @@ class AWSBillDatabase:
                     'roommate_portion': roommate_portion,
                     'my_portion': my_portion,
                     'processed_date': bill.get('processed_date', ''),
-                    'status': bill.get('status', 'processed')
+                    'status': bill.get('status', 'processed'),
+                    'sms_sent': bill.get('sms_sent', False),
+                    'sms_sent_at': bill.get('sms_sent_at', ''),
+                    'venmo_sent': bill.get('venmo_sent', False),
+                    'payment_confirmed': bill.get('payment_confirmed', False)
                 })
             
             # Sort by due date (newest first)
@@ -111,14 +115,13 @@ class AWSBillDatabase:
                     'my_portion': my_portion,
                     'processed_date': bill.get('processed_date', ''),
                     'status': bill.get('status', 'processed'),
-                    'email_body': bill.get('email_body', ''),
-                    'pdf_generated': bill.get('pdf_generated', False),
-                    'pdf_sent': bill.get('pdf_sent', False),
+                    'sms_sent': bill.get('sms_sent', False),
+                    'sms_sent_at': bill.get('sms_sent_at', ''),
                     'venmo_sent': bill.get('venmo_sent', False),
+                    'payment_confirmed': bill.get('payment_confirmed', False),
+                    'email_id': bill.get('email_id', ''),
                     'email_subject': bill.get('email_subject', ''),
                     'email_date': bill.get('email_date', ''),
-                    'email_id': bill.get('email_id', ''),
-                    'venmo_link': bill.get('venmo_link', ''),
                     'notes': bill.get('notes', '')
                 }
             return None
@@ -177,8 +180,7 @@ def dashboard():
             'total_amount': total_amount,
             'total_roommate_portion': total_roommate_portion,
             'pending_bills': 0,  # For now, no pending logic
-            'pdfs_generated': total_bills,  # One PDF per bill
-            'pdfs_sent': total_bills,  # One email per bill
+            'sms_sent': sum(1 for bill in bills if bill.get('sms_sent', False)) if bills else 0,
             'average_bill': total_amount / total_bills if total_bills > 0 else 0
         }
         
@@ -220,69 +222,7 @@ def bill_detail(bill_id):
                          bill_log=bill_log,
                          settings=settings)
 
-@app.route('/download-pdf/<bill_id>')
-def download_pdf(bill_id):
-    """Download PDF for bill (placeholder)"""
-    return jsonify({'error': 'PDF download not implemented yet'}), 501
 
-@app.route('/generate-pdf/<bill_id>', methods=['POST'])
-def generate_pdf(bill_id):
-    """Generate PDF for bill"""
-    try:
-        bill = db.get_bill_by_id(bill_id)
-        if not bill:
-            return jsonify({'success': False, 'message': 'Bill not found'}), 404
-        
-        # TODO: Implement PDF generation via Lambda
-        return jsonify({
-            'success': True,
-            'message': 'PDF generation not implemented yet (TEST MODE)'
-        })
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
-
-@app.route('/send-email/<bill_id>', methods=['POST'])
-def send_email_route(bill_id):
-    """Send email for bill"""
-    try:
-        bill = db.get_bill_by_id(bill_id)
-        if not bill:
-            return jsonify({'success': False, 'message': 'Bill not found'}), 404
-        
-        # TODO: Implement email sending via SES
-        return jsonify({
-            'success': True,
-            'message': 'Email sending not implemented yet (TEST MODE)'
-        })
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
-
-@app.route('/test-email/<bill_id>', methods=['POST'])
-def test_email_route(bill_id):
-    """Test email for bill"""
-    try:
-        bill = db.get_bill_by_id(bill_id)
-        if not bill:
-            return jsonify({'success': False, 'message': 'Bill not found'}), 404
-        
-        settings = load_settings()
-        
-        # Return test email info
-        return jsonify({
-            'success': True,
-            'message': 'Test email would be sent (TEST MODE)',
-            'last_sent': '2025-07-29 04:30:00',
-            'debug_info': {
-                'recipient': settings.get('roommate_email', 'roommate@example.com'),
-                'sender': settings.get('my_email', 'me@example.com'),
-                'pdf_exists': bill.get('pdf_generated', False),
-                'pdf_size': 0,
-                'test_mode': settings.get('test_mode', True),
-                'email_notifications_enabled': True
-            }
-        })
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
 
 @app.route('/generate-venmo/<bill_id>', methods=['POST'])
 def generate_venmo_route(bill_id):
@@ -436,8 +376,11 @@ def create_venmo_request():
             if not gmail_app_password:
                 raise Exception("Gmail app password not configured in settings")
             
+            # Simplify the Venmo URL for better SMS compatibility
+            simple_venmo_url = f"venmo://paycharge?txn=charge&recipients={settings.get('roommate_venmo', 'UshiLo')}&amount={bill['roommate_portion']:.2f}"
+            
             bill_month = datetime.strptime(bill['due_date'], '%m/%d/%Y').strftime('%B %Y')
-            message_body = f"💰 PG&E Bill - {bill_month}\nAmount: ${bill['roommate_portion']:.2f}\n{venmo_url}"
+            message_body = f"💰 PG&E Bill - {bill_month}\nAmount: ${bill['roommate_portion']:.2f}\n{simple_venmo_url}"
             
             # Create and send email-to-SMS
             msg = MIMEText(message_body)
@@ -452,6 +395,21 @@ def create_venmo_request():
             server.quit()
             
             logger.info(f"SMS sent successfully via {sms_gateway}")
+            
+            # Mark bill as having SMS sent with timestamp
+            try:
+                current_time = datetime.now().isoformat()
+                db.table.update_item(
+                    Key={'bill_id': bill_id},
+                    UpdateExpression='SET sms_sent = :val, venmo_sent = :val, sms_sent_at = :sent_at, updated_at = :updated',
+                    ExpressionAttributeValues={
+                        ':val': True,
+                        ':sent_at': current_time,
+                        ':updated': current_time
+                    }
+                )
+            except Exception as e:
+                logger.warning(f"Could not update bill status: {e}")
             
             return jsonify({
                 'success': True,
@@ -481,43 +439,6 @@ def create_venmo_request():
             'error': str(e)
         }), 500
 
-@app.route('/api/send-email', methods=['POST'])
-def send_email():
-    """Send email notification"""
-    try:
-        data = request.get_json()
-        bill_id = data.get('bill_id')
-        
-        if not bill_id:
-            return jsonify({'success': False, 'error': 'Bill ID required'}), 400
-        
-        bill = db.get_bill_by_id(bill_id)
-        if not bill:
-            return jsonify({'success': False, 'error': 'Bill not found'}), 404
-        
-        settings = load_settings()
-        
-        # In test mode, simulate email sending
-        if settings.get('test_mode', True):
-            return jsonify({
-                'success': True,
-                'message': 'TEST MODE: Email sent (simulated)',
-                'recipient': settings.get('roommate_email', 'roommate@example.com')
-            })
-        
-        # TODO: Implement email sending via SES
-        return jsonify({
-            'success': True,
-            'message': 'Email sent successfully',
-            'recipient': settings.get('roommate_email')
-        })
-        
-    except Exception as e:
-        logger.error(f"Error sending email: {e}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
 
 @app.route('/settings')
 def settings():
@@ -548,17 +469,6 @@ def test_connections(component=None):
             results['status'] = 'info'
             results['message'] = 'Mail app not needed for AWS deployment'
             
-        elif component == 'pdf':
-            try:
-                # Test if we can access S3 for PDF storage
-                import boto3
-                s3 = boto3.client('s3', region_name=AWS_REGION)
-                # Just test permissions, don't create anything
-                results['status'] = 'success'
-                results['message'] = 'PDF generation and S3 storage ready'
-            except Exception as e:
-                results['status'] = 'warning'
-                results['message'] = f'PDF storage may have issues: {str(e)}'
                 
         elif component == 'venmo':
             settings = load_settings()

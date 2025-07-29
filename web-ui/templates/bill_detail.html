@@ -62,20 +62,11 @@
                 <div class="list-group list-group-flush">
                     <div class="list-group-item d-flex justify-content-between align-items-center">
                         <div>
-                            <i class="bi bi-file-earmark-pdf me-2"></i>
-                            PDF Generated
+                            <i class="bi bi-phone me-2"></i>
+                            SMS Notification
                         </div>
-                        <span class="badge bg-{{ 'success' if bill.pdf_generated else 'secondary' }}">
-                            {{ 'Yes' if bill.pdf_generated else 'No' }}
-                        </span>
-                    </div>
-                    <div class="list-group-item d-flex justify-content-between align-items-center">
-                        <div>
-                            <i class="bi bi-envelope me-2"></i>
-                            Email Sent
-                        </div>
-                        <span class="badge bg-{{ 'success' if bill.pdf_sent else 'secondary' }}">
-                            {{ 'Yes' if bill.pdf_sent else 'No' }}
+                        <span class="badge bg-{{ 'success' if bill.sms_sent or bill.venmo_sent else 'secondary' }}">
+                            {{ 'Sent' if bill.sms_sent or bill.venmo_sent else 'Not Sent' }}
                         </span>
                     </div>
                     <div class="list-group-item d-flex justify-content-between align-items-center">
@@ -84,7 +75,16 @@
                             Venmo Request
                         </div>
                         <span class="badge bg-{{ 'success' if bill.venmo_sent else 'secondary' }}">
-                            {{ 'Generated' if bill.venmo_sent else 'Pending' }}
+                            {{ 'Created' if bill.venmo_sent else 'Pending' }}
+                        </span>
+                    </div>
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <i class="bi bi-check-circle me-2"></i>
+                            Payment Status
+                        </div>
+                        <span class="badge bg-{{ 'success' if bill.payment_confirmed else 'warning' }}">
+                            {{ 'Paid' if bill.payment_confirmed else 'Awaiting' }}
                         </span>
                     </div>
                 </div>
@@ -101,59 +101,17 @@
                 <i class="bi bi-lightning-charge"></i> Actions
             </div>
             <div class="card-body">
-                <div class="row">
-                    <div class="col-md-3 mb-2">
-                        {% if not bill.pdf_generated %}
-                        <button class="btn btn-warning w-100" onclick="generatePDF({{ bill.id }})">
-                            <i class="bi bi-file-earmark-pdf"></i> Generate PDF
-                        </button>
-                        {% else %}
-                        <a href="{{ url_for('download_pdf', bill_id=bill.id) }}" class="btn btn-success w-100">
-                            <i class="bi bi-download"></i> Download PDF
-                        </a>
-                        {% endif %}
-                    </div>
-                    
-                    <div class="col-md-3 mb-2">
-                        {% if bill.pdf_generated and not bill.pdf_sent %}
-                        <button class="btn btn-info w-100" onclick="sendEmail({{ bill.id }})">
-                            <i class="bi bi-envelope"></i> Send Email
-                        </button>
-                        {% else %}
-                        <button class="btn btn-outline-info w-100" disabled>
-                            <i class="bi bi-envelope-check"></i> 
-                            {{ 'Email Sent' if bill.pdf_sent else 'Generate PDF First' }}
-                        </button>
-                        {% endif %}
-                    </div>
-                    
-                    <div class="col-md-3 mb-2">
-                        {% if bill.pdf_generated %}
-                        <button class="btn btn-outline-warning w-100" onclick="testEmail({{ bill.id }})">
-                            <i class="bi bi-bug"></i> Test Email
-                        </button>
-                        {% else %}
-                        <button class="btn btn-outline-secondary w-100" disabled>
-                            <i class="bi bi-bug"></i> Test Email
-                        </button>
-                        {% endif %}
-                    </div>
-                    
-                    <div class="col-md-3 mb-2">
-                        <button class="btn btn-success w-100" onclick="generateVenmo({{ bill.id }})">
-                            <i class="bi bi-credit-card"></i> Create Venmo Request
-                        </button>
-                    </div>
+                <div class="d-grid gap-2">
+                    <button class="btn btn-success btn-lg" onclick="createVenmoRequest({{ bill.id }})">
+                        <i class="bi bi-phone"></i> Send SMS with Venmo Link
+                    </button>
+                    {% if bill.venmo_sent %}
+                    <small class="text-center text-muted mt-2">
+                        <i class="bi bi-check-circle text-success"></i> SMS already sent
+                    </small>
+                    {% endif %}
                 </div>
                 
-                <!-- Email Status Display -->
-                <div id="emailStatus" class="mt-3" style="display: none;">
-                    <div class="alert alert-info">
-                        <i class="bi bi-info-circle"></i> 
-                        <span id="emailStatusText"></span>
-                        <div id="emailDebugInfo" class="mt-2 small" style="display: none;"></div>
-                    </div>
-                </div>
             </div>
         </div>
     </div>
@@ -185,34 +143,33 @@
         </div>
     </div>
 
-    <!-- Venmo Information -->
+    <!-- SMS/Venmo Information -->
     <div class="col-md-6 mb-4">
         <div class="card">
             <div class="card-header">
-                <i class="bi bi-credit-card"></i> Venmo Details
+                <i class="bi bi-phone"></i> SMS & Venmo Status
             </div>
             <div class="card-body">
-                {% if bill.venmo_link %}
-                <div class="mb-3">
-                    <label class="form-label">Venmo Link:</label>
-                    <div class="input-group">
-                        <input type="text" class="form-control" value="{{ bill.venmo_link }}" readonly>
-                        <button class="btn btn-outline-secondary" onclick="copyToClipboard('{{ bill.venmo_link }}')">
-                            <i class="bi bi-clipboard"></i>
-                        </button>
-                    </div>
+                {% if bill.sms_sent or bill.venmo_sent %}
+                <div class="alert alert-success">
+                    <i class="bi bi-check-circle"></i> SMS sent to your phone
+                    <br>
+                    <small class="text-muted">Check your messages for the Venmo payment link</small>
+                    {% if bill.sms_sent_at %}
+                    <br>
+                    <small class="text-muted">Sent: {{ bill.sms_sent_at.split('T')[0] }} at {{ bill.sms_sent_at.split('T')[1].split('.')[0] if 'T' in bill.sms_sent_at else bill.sms_sent_at }}</small>
+                    {% endif %}
                 </div>
-                <div class="d-grid">
-                    <a href="{{ bill.venmo_link }}" class="btn btn-success">
-                        <i class="bi bi-credit-card"></i> Open Venmo
-                    </a>
+                <div class="text-center">
+                    <p class="mb-2"><strong>Amount:</strong> ${{ "%.2f"|format(bill.roommate_portion) }}</p>
+                    <p class="mb-0"><strong>Recipient:</strong> @{{ settings.roommate_venmo }}</p>
                 </div>
                 {% else %}
                 <div class="text-center text-muted py-3">
-                    <i class="bi bi-credit-card" style="font-size: 2rem;"></i>
-                    <p class="mt-2">No Venmo request generated yet</p>
-                    <button class="btn btn-success" onclick="generateVenmo({{ bill.id }})">
-                        Create Venmo Request
+                    <i class="bi bi-phone" style="font-size: 2rem;"></i>
+                    <p class="mt-2">No SMS sent yet</p>
+                    <button class="btn btn-success" onclick="createVenmoRequest({{ bill.id }})">
+                        <i class="bi bi-phone"></i> Send SMS with Venmo Link
                     </button>
                 </div>
                 {% endif %}
@@ -248,11 +205,11 @@
                 <div class="alert alert-warning">
                     <h5><i class="bi bi-clock"></i> Payment Pending</h5>
                     <p class="mb-0">
-                        {% if bill.email_sent %}
-                        Email notification sent. Waiting for Venmo payment confirmation.
+                        {% if bill.sms_sent or bill.venmo_sent %}
+                        SMS notification sent. Waiting for Venmo payment confirmation.
                         The system automatically checks for payments every time it runs.
                         {% else %}
-                        No payment request sent yet. Generate and send a Venmo request first.
+                        No payment request sent yet. Send an SMS with Venmo link first.
                         {% endif %}
                     </p>
                 </div>
@@ -323,116 +280,34 @@
 
 {% block scripts %}
 <script>
-function generatePDF(billId) {
+function createVenmoRequest(billId) {
     const button = event.target;
     const originalText = showLoading(button);
     
-    fetch(`/generate-pdf/${billId}`, {method: 'POST'})
-    .then(response => response.json())
-    .then(data => {
-        hideLoading(button, originalText);
-        showToast(data.message, data.success ? 'success' : 'error');
-        if (data.success) {
-            setTimeout(() => location.reload(), 2000);
-        }
+    fetch(`/api/create-venmo-request`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({bill_id: billId})
     })
-    .catch(error => {
-        hideLoading(button, originalText);
-        showToast('Error generating PDF: ' + error.message, 'error');
-    });
-}
-
-function sendEmail(billId) {
-    const button = event.target;
-    const originalText = showLoading(button);
-    
-    fetch(`/send-email/${billId}`, {method: 'POST'})
     .then(response => response.json())
     .then(data => {
         hideLoading(button, originalText);
-        showToast(data.message, data.success ? 'success' : 'error');
         if (data.success) {
+            showToast('SMS sent with Venmo link!', 'success');
             setTimeout(() => location.reload(), 2000);
-        }
-    })
-    .catch(error => {
-        hideLoading(button, originalText);
-        showToast('Error sending email: ' + error.message, 'error');
-    });
-}
-
-function testEmail(billId) {
-    const button = event.target;
-    const originalText = showLoading(button);
-    
-    fetch(`/test-email/${billId}`, {method: 'POST'})
-    .then(response => response.json())
-    .then(data => {
-        hideLoading(button, originalText);
-        
-        if (data.success) {
-            showToast('Test email sent successfully!', 'success');
-            showEmailStatus(`Test email sent at ${data.last_sent}`, data.debug_info);
         } else {
-            showToast(`Test email failed: ${data.message}`, 'error');
-            showEmailStatus(`Test email failed`, data.debug_info);
+            showToast(data.error || data.message || 'Error creating Venmo request', 'error');
         }
     })
     .catch(error => {
         hideLoading(button, originalText);
-        showToast(`Test email error: ${error.message}`, 'error');
+        showToast('Error: ' + error.message, 'error');
     });
 }
 
-function showEmailStatus(message, debugInfo) {
-    const statusDiv = document.getElementById('emailStatus');
-    const statusText = document.getElementById('emailStatusText');
-    const debugDiv = document.getElementById('emailDebugInfo');
-    
-    statusText.textContent = message;
-    
-    if (debugInfo) {
-        debugDiv.innerHTML = `
-            <strong>Debug Info:</strong><br>
-            • Recipient: ${debugInfo.recipient}<br>
-            • Sender: ${debugInfo.sender}<br>
-            • PDF exists: ${debugInfo.pdf_exists ? 'Yes' : 'No'}<br>
-            • PDF size: ${debugInfo.pdf_size} bytes<br>
-            • Test mode: ${debugInfo.test_mode ? 'Enabled' : 'Disabled'}<br>
-            • Email notifications: ${debugInfo.email_notifications_enabled ? 'Enabled' : 'Disabled'}
-        `;
-        debugDiv.style.display = 'block';
-    } else {
-        debugDiv.style.display = 'none';
-    }
-    
-    statusDiv.style.display = 'block';
-    
-    // Auto-hide after 10 seconds
-    setTimeout(() => {
-        statusDiv.style.display = 'none';
-    }, 10000);
-}
-
+// Alias for backward compatibility
 function generateVenmo(billId) {
-    const button = event.target;
-    const originalText = showLoading(button);
-    
-    fetch(`/generate-venmo/${billId}`, {method: 'POST'})
-    .then(response => response.json())
-    .then(data => {
-        hideLoading(button, originalText);
-        if (data.success) {
-            showToast(`Venmo request ready for $${data.summary.roommate_owes}`, 'success');
-            setTimeout(() => location.reload(), 2000);
-        } else {
-            showToast(data.message, 'error');
-        }
-    })
-    .catch(error => {
-        hideLoading(button, originalText);
-        showToast('Error generating Venmo request: ' + error.message, 'error');
-    });
+    createVenmoRequest(billId);
 }
 
 function copyToClipboard(text) {

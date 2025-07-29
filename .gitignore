@@ -57,6 +57,7 @@ venv.bak/
 *.swp
 *.swo
 *~
+.claude/
 
 # OS
 .DS_Store
@@ -73,6 +74,7 @@ token.json
 client_secret_*.json
 *.pem
 *.key
+current_settings.json
 
 # Environment variables
 .env

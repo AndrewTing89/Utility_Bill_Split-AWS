@@ -20,20 +20,12 @@
                         <td>{{ settings.gmail_user }}</td>
                     </tr>
                     <tr>
-                        <td><strong>Your Email:</strong></td>
-                        <td>{{ settings.my_email }}</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Roommate Email:</strong></td>
-                        <td>{{ settings.roommate_email }}</td>
-                    </tr>
-                    <tr>
                         <td><strong>Your Phone:</strong></td>
                         <td>{{ settings.my_phone if settings.my_phone and settings.my_phone != '+1234567890' else 'Not configured' }}</td>
                     </tr>
                     <tr>
-                        <td><strong>Roommate Phone:</strong></td>
-                        <td><span class="text-muted">Not needed - using email only</span></td>
+                        <td><strong>SMS Gateway:</strong></td>
+                        <td>{{ settings.sms_gateway }}</td>
                     </tr>
                     <tr>
                         <td><strong>Your Venmo:</strong></td>
@@ -104,53 +96,18 @@
                         </div>
                     </div>
                     
-                    <div class="col-md-3 mb-3">
+                    <div class="col-md-6 mb-3">
                         <div class="card text-center h-100">
                             <div class="card-body">
-                                <i class="bi bi-envelope-{{ 'check text-success' if settings.email_notifications else 'x text-secondary' }}" style="font-size: 2rem;"></i>
-                                <h6 class="card-title mt-2">Email Notifications</h6>
-                                <span class="badge bg-{{ 'success' if settings.email_notifications else 'secondary' }}">
-                                    {{ 'Enabled' if settings.email_notifications else 'Disabled' }}
+                                <i class="bi bi-phone-{{ 'fill text-success' }}" style="font-size: 2rem;"></i>
+                                <h6 class="card-title mt-2">SMS Notifications</h6>
+                                <span class="badge bg-success">
+                                    Enabled
                                 </span>
                             </div>
                         </div>
                     </div>
                     
-                    <div class="col-md-3 mb-3">
-                        <div class="card text-center h-100">
-                            <div class="card-body">
-                                <i class="bi bi-file-earmark-pdf-{{ 'fill text-success' if settings.pdf_generation else ' text-secondary' }}" style="font-size: 2rem;"></i>
-                                <h6 class="card-title mt-2">PDF Generation</h6>
-                                <span class="badge bg-{{ 'success' if settings.pdf_generation else 'secondary' }}">
-                                    {{ 'Enabled' if settings.pdf_generation else 'Disabled' }}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="col-md-3 mb-3">
-                        <div class="card text-center h-100">
-                            <div class="card-body">
-                                <i class="bi bi-box-arrow-up-{{ 'fill text-success' if settings.auto_open else ' text-secondary' }}" style="font-size: 2rem;"></i>
-                                <h6 class="card-title mt-2">Auto-open Links</h6>
-                                <span class="badge bg-{{ 'success' if settings.auto_open else 'secondary' }}">
-                                    {{ 'Enabled' if settings.auto_open else 'Disabled' }}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="col-md-3 mb-3">
-                        <div class="card text-center h-100">
-                            <div class="card-body">
-                                <i class="bi bi-phone-{{ 'fill text-success' if settings.text_messaging else ' text-secondary' }}" style="font-size: 2rem;"></i>
-                                <h6 class="card-title mt-2">Text Messaging</h6>
-                                <span class="badge bg-{{ 'success' if settings.text_messaging else 'secondary' }}">
-                                    {{ 'Enabled' if settings.text_messaging else 'Disabled' }}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>
@@ -182,7 +139,7 @@
                         <div class="alert alert-success">
                             <i class="bi bi-info-circle"></i>
                             <strong>Next Run:</strong> Your bills will be processed automatically on the 5th of next month. 
-                            The system will scan Gmail, generate PDFs, send emails, and create Venmo requests.
+                            The system will scan Gmail and send SMS notifications with Venmo payment links.
                         </div>
                         {% else %}
                         <div class="alert alert-info">
@@ -229,22 +186,12 @@
                 <p class="text-muted mb-3">Test the various system components to ensure everything is working correctly.</p>
                 
                 <div class="row">
-                    <div class="col-md-3 mb-2">
+                    <div class="col-md-6 mb-2">
                         <button class="btn btn-outline-primary w-100" onclick="testConnection('gmail')">
                             <i class="bi bi-envelope"></i> Test Gmail
                         </button>
                     </div>
-                    <div class="col-md-3 mb-2">
-                        <button class="btn btn-outline-info w-100" onclick="testConnection('mail-app')">
-                            <i class="bi bi-app"></i> Test Mail App
-                        </button>
-                    </div>
-                    <div class="col-md-3 mb-2">
-                        <button class="btn btn-outline-warning w-100" onclick="testConnection('pdf')">
-                            <i class="bi bi-file-earmark-pdf"></i> Test PDF Gen
-                        </button>
-                    </div>
-                    <div class="col-md-3 mb-2">
+                    <div class="col-md-6 mb-2">
                         <button class="btn btn-outline-success w-100" onclick="testConnection('venmo')">
                             <i class="bi bi-credit-card"></i> Test Venmo
                         </button>
@@ -282,7 +229,6 @@
                             <li><code>.env</code> - Environment variables</li>
                             <li><code>credentials.json</code> - Gmail API credentials</li>
                             <li><code>data/bills.db</code> - Bill database</li>
-                            <li><code>data/pdfs/</code> - Generated PDFs</li>
                         </ul>
                     </div>
                     <div class="col-md-6">
@@ -323,7 +269,7 @@ function testAllConnections() {
     const button = event.target;
     const originalText = showLoading(button);
     
-    const tests = ['gmail', 'mail-app', 'pdf', 'venmo'];
+    const tests = ['gmail', 'venmo'];
     let completed = 0;
     let allPassed = true;
     

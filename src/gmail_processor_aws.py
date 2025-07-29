@@ -33,8 +33,8 @@ class GmailProcessorAWS:
     def __init__(self, settings: Dict):
         self.settings = settings
         self.service = None
-        self.dynamodb = boto3.resource('dynamodb')
-        self.bills_table = self.dynamodb.Table(os.environ.get('BILLS_TABLE', 'pge-bills'))
+        self.dynamodb = boto3.resource('dynamodb', region_name='us-west-2')
+        self.bills_table = self.dynamodb.Table(os.environ.get('BILLS_TABLE', 'pge-bill-automation-bills-dev'))
         
     def authenticate(self) -> bool:
         """
@@ -153,7 +153,7 @@ class GmailProcessorAWS:
             before_date = end_date.strftime('%Y/%m/%d')
             
             # Search query for PG&E bills  
-            query = f'from:pge.com OR subject:"PG&E bill" OR subject:"Your PG&E bill" after:{after_date} before:{before_date}'
+            query = f'from:DoNotReply@billpay.pge.com after:{after_date} before:{before_date}'
             logger.info(f"Gmail search query: {query}")
             
             # Search emails
@@ -187,9 +187,59 @@ class GmailProcessorAWS:
             logger.error(f"Gmail search failed: {e}")
             return []
     
+    def _is_bill_statement(self, email_data: Dict) -> bool:
+        """Check if email is actually a bill statement (not payment confirmation, etc)"""
+        try:
+            # Get email headers
+            headers = email_data.get('payload', {}).get('headers', [])
+            subject = next((h['value'] for h in headers if h['name'] == 'Subject'), '')
+            
+            # Check subject line
+            if 'Energy Statement is Ready' not in subject:
+                return False
+            
+            # Get email body to check content
+            body = self._get_email_body(email_data)
+            if not body:
+                return False
+            
+            # Check for bill statement indicators
+            bill_indicators = [
+                'paperless bill',
+                'is now available',
+                'statement balance'
+            ]
+            
+            # Check for payment confirmation indicators (should NOT be present)
+            payment_indicators = [
+                'payment has been processed',
+                'Confirmation Number',
+                'Date of Payment',
+                'Payment Amount',
+                'We thank you for being',
+                'previously scheduled recurring payment'
+            ]
+            
+            # Must have at least one bill indicator
+            has_bill_indicator = any(indicator.lower() in body.lower() for indicator in bill_indicators)
+            
+            # Must NOT have payment indicators
+            has_payment_indicator = any(indicator.lower() in body.lower() for indicator in payment_indicators)
+            
+            return has_bill_indicator and not has_payment_indicator
+            
+        except Exception as e:
+            logger.error(f"Error checking if email is bill statement: {e}")
+            return False
+    
     def _extract_bill_info(self, email_data: Dict) -> Optional[Dict]:
         """Extract bill information from email"""
         try:
+            # First check if this is actually a bill statement
+            if not self._is_bill_statement(email_data):
+                logger.info("Email is not a bill statement, skipping")
+                return None
+            
             # Get email body
             body = self._get_email_body(email_data)
             if not body:
@@ -261,10 +311,15 @@ class GmailProcessorAWS:
                             return re.sub('<[^<]+?>', '', html_content)
             else:
                 # Single part message
-                if payload.get('mimeType') == 'text/plain':
-                    data = payload.get('body', {}).get('data')
-                    if data:
-                        return base64.urlsafe_b64decode(data).decode('utf-8')
+                data = payload.get('body', {}).get('data')
+                if data:
+                    content = base64.urlsafe_b64decode(data).decode('utf-8')
+                    if payload.get('mimeType') == 'text/html':
+                        # Strip HTML tags
+                        import re
+                        return re.sub('<[^<]+?>', '', content)
+                    else:
+                        return content
             
             return None
             
@@ -331,3 +386,53 @@ class GmailProcessorAWS:
         except Exception as e:
             logger.error(f"Failed to save bill to DynamoDB: {e}")
             return None
+    
+    def search_emails(self, query: str, max_results: int = 50) -> List[Dict]:
+        """
+        Search emails with a custom Gmail query
+        
+        Args:
+            query: Gmail search query
+            max_results: Maximum number of results to return
+            
+        Returns:
+            List of email data dictionaries
+        """
+        try:
+            if not self.service:
+                if not self.authenticate():
+                    return []
+            
+            logger.info(f"Searching emails with query: {query}")
+            
+            # Search emails
+            results = self.service.users().messages().list(
+                userId='me',
+                q=query,
+                maxResults=max_results
+            ).execute()
+            
+            messages = results.get('messages', [])
+            emails = []
+            
+            for message in messages:
+                try:
+                    # Get full message details
+                    email_detail = self.service.users().messages().get(
+                        userId='me',
+                        id=message['id'],
+                        format='full'
+                    ).execute()
+                    
+                    emails.append(email_detail)
+                    
+                except HttpError as e:
+                    logger.warning(f"Could not fetch email {message['id']}: {e}")
+                    continue
+            
+            logger.info(f"Found {len(emails)} emails matching query")
+            return emails
+            
+        except Exception as e:
+            logger.error(f"Email search failed: {e}")
+            return []

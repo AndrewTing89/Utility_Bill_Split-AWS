@@ -19,8 +19,6 @@ from botocore.exceptions import ClientError
 
 # AWS clients
 dynamodb = boto3.resource('dynamodb')
-s3_client = boto3.client('s3')
-ses_client = boto3.client('ses')
 secrets_client = boto3.client('secretsmanager')
 
 logger = logging.getLogger(__name__)
@@ -28,7 +26,6 @@ logger = logging.getLogger(__name__)
 # Environment variables
 BILLS_TABLE = os.environ.get('BILLS_TABLE', 'pge-bills')
 PROCESSING_LOG_TABLE = os.environ.get('PROCESSING_LOG_TABLE', 'pge-processing-log') 
-PDF_BUCKET = os.environ.get('PDF_BUCKET', 'pge-bill-pdfs')
 SECRETS_ARN = os.environ.get('SECRETS_ARN')
 
 
@@ -94,86 +91,10 @@ class AWSBillAutomation:
                 'new_bills': []
             }
     
-    def generate_bill_pdf(self, bill_data: Dict) -> Optional[str]:
-        """
-        Generate PDF and upload to S3
-        
-        Args:
-            bill_data: Bill information
-            
-        Returns:
-            S3 URL of generated PDF or None if failed
-        """
-        try:
-            from pdf_generator_aws import PDFGeneratorAWS
-            
-            generator = PDFGeneratorAWS()
-            pdf_content = generator.generate_pdf(bill_data)
-            
-            if pdf_content:
-                # Upload to S3
-                due_date = bill_data['due_date'].replace('/', '-')
-                s3_key = f"bills/{due_date}-pge-bill.pdf"
-                
-                s3_client.put_object(
-                    Bucket=PDF_BUCKET,
-                    Key=s3_key,
-                    Body=pdf_content,
-                    ContentType='application/pdf',
-                    ServerSideEncryption='AES256'
-                )
-                
-                s3_url = f"s3://{PDF_BUCKET}/{s3_key}"
-                logger.info(f"PDF uploaded to S3: {s3_url}")
-                return s3_url
-                
-        except Exception as e:
-            logger.error(f"PDF generation failed: {e}")
-            return None
-    
-    def send_email_notification(self, bill_data: Dict, pdf_s3_url: str, venmo_info: Dict) -> bool:
-        """
-        Send email notification via SES
-        
-        Args:
-            bill_data: Bill information
-            pdf_s3_url: S3 URL of PDF
-            venmo_info: Venmo request information
-            
-        Returns:
-            True if email sent successfully
-        """
-        try:
-            if self.settings.get('test_mode', True):
-                logger.info("TEST MODE: Email notification simulated")
-                return True
-                
-            # Create email content
-            subject = self._create_email_subject(bill_data)
-            body_html, body_text = self._create_email_body(bill_data, venmo_info)
-            
-            # Get PDF from S3 for attachment
-            pdf_content = self._get_pdf_from_s3(pdf_s3_url)
-            
-            # Send via SES
-            response = ses_client.send_raw_email(
-                Source=self.settings['my_email'],
-                Destinations=[self.settings['roommate_email']],
-                RawMessage={'Data': self._create_raw_email(
-                    subject, body_html, body_text, pdf_content
-                )}
-            )
-            
-            logger.info(f"Email sent via SES: {response['MessageId']}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Email sending failed: {e}")
-            return False
     
     def send_sms_notification(self, venmo_url: str, bill_data: Dict) -> bool:
         """
-        Send SMS notification via SNS
+        Send SMS notification via Gmail SMTP to email-to-SMS gateway
         
         Args:
             venmo_url: Venmo deep link
@@ -187,22 +108,53 @@ class AWSBillAutomation:
                 logger.info("TEST MODE: SMS notification simulated")
                 return True
                 
-            import boto3
-            sns_client = boto3.client('sns')
+            import smtplib
+            from email.mime.text import MIMEText
+            from datetime import datetime
+            
+            # Get SMS credentials from settings
+            gmail_user = self.settings.get('gmail_user')
+            gmail_app_password = self.settings.get('gmail_app_password')
+            sms_gateway = self.settings.get('sms_gateway')
+            
+            if not gmail_user or not gmail_app_password or not sms_gateway:
+                logger.error("SMS credentials not configured in settings")
+                return False
             
             roommate_portion = bill_data['roommate_portion']
             bill_month = datetime.strptime(bill_data['due_date'], '%m/%d/%Y').strftime('%B %Y')
             
-            message = f"💰 PG&E Bill Split - {bill_month}\n"
-            message += f"Request ${roommate_portion:.2f} from roommate\n"
-            message += f"Venmo Link: {venmo_url}"
+            message_body = f"💰 PG&E Bill - {bill_month}\nAmount: ${roommate_portion:.2f}\n{venmo_url}"
             
-            response = sns_client.publish(
-                PhoneNumber=self.settings['my_phone'],
-                Message=message
-            )
+            # Create and send email-to-SMS
+            msg = MIMEText(message_body)
+            msg['From'] = gmail_user
+            msg['To'] = sms_gateway
+            msg['Subject'] = ''  # Empty subject for SMS
             
-            logger.info(f"SMS sent via SNS: {response['MessageId']}")
+            server = smtplib.SMTP('smtp.gmail.com', 587)
+            server.starttls()
+            server.login(gmail_user, gmail_app_password)
+            server.send_message(msg)
+            server.quit()
+            
+            logger.info(f"SMS sent via email-to-SMS gateway: {sms_gateway}")
+            
+            # Update bill record with SMS sent status and timestamp
+            try:
+                current_time = datetime.now().isoformat()
+                self.bills_table.update_item(
+                    Key={'bill_id': bill_data['bill_id']},
+                    UpdateExpression='SET sms_sent = :val, sms_sent_at = :sent_at, updated_at = :updated',
+                    ExpressionAttributeValues={
+                        ':val': True,
+                        ':sent_at': current_time,
+                        ':updated': current_time
+                    }
+                )
+            except Exception as e:
+                logger.warning(f"Could not update SMS status: {e}")
+            
             return True
             
         except Exception as e:
@@ -223,32 +175,71 @@ class AWSBillAutomation:
         except Exception as e:
             logger.error(f"Failed to log action: {e}")
     
-    def _create_email_subject(self, bill_data: Dict) -> str:
-        """Create email subject line"""
-        bill_month = datetime.strptime(bill_data['due_date'], '%m/%d/%Y').strftime('%B %Y')
-        return f"PG&E Bill Split - {bill_month} (${bill_data['roommate_portion']:.2f})"
     
-    def _create_email_body(self, bill_data: Dict, venmo_info: Dict) -> tuple:
-        """Create HTML and text email body"""
-        # Implementation would create the email body content
-        # Similar to the existing email_notifier.py but for SES
-        html_body = "Email content here..."
-        text_body = "Email content here..."
-        return html_body, text_body
-    
-    def _get_pdf_from_s3(self, s3_url: str) -> bytes:
-        """Get PDF content from S3"""
-        bucket = PDF_BUCKET
-        key = s3_url.replace(f"s3://{bucket}/", "")
+    def check_venmo_payments(self, days_back: int = 30) -> Dict:
+        """
+        Check for Venmo payment confirmations and mark bills as paid
         
-        response = s3_client.get_object(Bucket=bucket, Key=key)
-        return response['Body'].read()
-    
-    def _create_raw_email(self, subject: str, html_body: str, text_body: str, pdf_content: bytes) -> bytes:
-        """Create raw email with PDF attachment for SES"""
-        # Implementation would create proper MIME email with attachment
-        # This is a placeholder
-        return b"Raw email content here..."
+        Args:
+            days_back: How many days back to search for payment confirmations
+            
+        Returns:
+            Dictionary with payment check results
+        """
+        try:
+            from venmo_payment_detector import VenmoPaymentDetector
+            from gmail_processor_aws import GmailProcessorAWS
+            
+            # Initialize Gmail processor and Venmo detector
+            gmail_processor = GmailProcessorAWS(self.settings)
+            if not gmail_processor.authenticate():
+                return {
+                    'payments_found': 0,
+                    'bills_updated': 0,
+                    'errors': ['Gmail authentication failed']
+                }
+            
+            venmo_detector = VenmoPaymentDetector()
+            
+            # Search for Venmo payment emails
+            since_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y/%m/%d')
+            query = f'from:venmo@venmo.com after:{since_date} "you charged"'
+            
+            logger.info(f"Searching for Venmo payments: {query}")
+            
+            # Search for Venmo emails directly
+            venmo_emails = gmail_processor.search_emails(query, max_results=50)
+            
+            results = {
+                'payments_found': 0,
+                'bills_updated': 0,
+                'errors': []
+            }
+            
+            # Process each Venmo email
+            for email_data in venmo_emails:
+                try:
+                    payment_result = venmo_detector.process_venmo_payment_email(email_data)
+                    
+                    if payment_result['success']:
+                        results['payments_found'] += 1
+                        results['bills_updated'] += payment_result.get('bills_updated', 0)
+                        logger.info(f"Payment processed: {payment_result['message']}")
+                    
+                except Exception as e:
+                    logger.error(f"Error processing Venmo email: {e}")
+                    results['errors'].append(str(e))
+            
+            logger.info(f"Venmo payment check complete: {results['payments_found']} payments found, {results['bills_updated']} bills updated")
+            return results
+            
+        except Exception as e:
+            logger.error(f"Venmo payment check failed: {e}")
+            return {
+                'payments_found': 0,
+                'bills_updated': 0,
+                'errors': [str(e)]
+            }
 
 
 def run_monthly_automation(test_mode: bool = True) -> Dict:
@@ -270,9 +261,9 @@ def run_monthly_automation(test_mode: bool = True) -> Dict:
     
     results = {
         'bills_processed': 0,
-        'pdfs_generated': 0,
-        'emails_sent': 0,
         'sms_sent': 0,
+        'payments_found': 0,
+        'bills_updated': 0,
         'errors': []
     }
     
@@ -285,12 +276,6 @@ def run_monthly_automation(test_mode: bool = True) -> Dict:
             bill_id = bill_data['bill_id']
             
             try:
-                # Generate PDF
-                pdf_url = automation.generate_bill_pdf(bill_data)
-                if pdf_url:
-                    results['pdfs_generated'] += 1
-                    automation.log_processing_action(bill_id, 'pdf_generated', pdf_url)
-                
                 # Generate Venmo info
                 venmo_info = {
                     'venmo_url': f"venmo://paycharge?txn=charge&recipients={automation.settings['roommate_venmo']}&amount={bill_data['roommate_portion']:.2f}",
@@ -299,11 +284,6 @@ def run_monthly_automation(test_mode: bool = True) -> Dict:
                         'payment_note': f"PG&E bill split - {bill_data['due_date']}"
                     }
                 }
-                
-                # Send email notification
-                if automation.send_email_notification(bill_data, pdf_url, venmo_info):
-                    results['emails_sent'] += 1
-                    automation.log_processing_action(bill_id, 'email_sent')
                 
                 # Send SMS notification
                 if automation.send_sms_notification(venmo_info['venmo_url'], bill_data):
@@ -316,6 +296,18 @@ def run_monthly_automation(test_mode: bool = True) -> Dict:
                 error_msg = f"Error processing bill {bill_id}: {str(e)}"
                 logger.error(error_msg)
                 results['errors'].append(error_msg)
+        
+        # Step 3: Check for Venmo payments
+        try:
+            payment_results = automation.check_venmo_payments()
+            results['payments_found'] = payment_results.get('payments_found', 0)
+            results['bills_updated'] = payment_results.get('bills_updated', 0)
+            if payment_results.get('errors'):
+                results['errors'].extend(payment_results['errors'])
+        except Exception as e:
+            error_msg = f"Payment check failed: {str(e)}"
+            logger.error(error_msg)
+            results['errors'].append(error_msg)
         
         logger.info(f"Automation completed: {results}")
         return results

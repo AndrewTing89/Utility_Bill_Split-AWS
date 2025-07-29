@@ -65,28 +65,13 @@
                             </span>
                         </td>
                         <td>
-                            <div class="progress" style="height: 20px;">
-                                {% set progress = 0 %}
-                                {% if bill.pdf_generated %}
-                                    {% set progress = progress + 33 %}
-                                {% endif %}
-                                {% if bill.pdf_sent %}
-                                    {% set progress = progress + 33 %}
-                                {% endif %}
-                                {% if bill.venmo_sent %}
-                                    {% set progress = progress + 34 %}
-                                {% endif %}
-                                
-                                <div class="progress-bar bg-{{ 'success' if progress == 100 else 'info' }}" 
-                                     style="width: {{ progress }}%">
-                                    {{ progress }}%
-                                </div>
-                            </div>
-                            <small class="text-muted">
-                                <i class="bi bi-file-earmark-pdf {{ 'text-success' if bill.pdf_generated else 'text-muted' }}"></i>
-                                <i class="bi bi-envelope {{ 'text-success' if bill.pdf_sent else 'text-muted' }}"></i>
-                                <i class="bi bi-credit-card {{ 'text-success' if bill.venmo_sent else 'text-muted' }}"></i>
-                            </small>
+                            {% if bill.sms_sent or bill.venmo_sent %}
+                                <i class="bi bi-check-circle text-success"></i>
+                                <small class="text-muted">SMS Sent</small>
+                            {% else %}
+                                <i class="bi bi-circle text-muted"></i>
+                                <small class="text-muted">Pending</small>
+                            {% endif %}
                         </td>
                         <td>
                             <div class="btn-group-vertical btn-group-sm" role="group">
@@ -94,20 +79,6 @@
                                    class="btn btn-outline-primary btn-sm">
                                     <i class="bi bi-eye"></i> View
                                 </a>
-                                
-                                {% if not bill.pdf_generated %}
-                                <button class="btn btn-outline-warning btn-sm" 
-                                        onclick="generatePDF({{ bill.id }})">
-                                    <i class="bi bi-file-earmark-pdf"></i> PDF
-                                </button>
-                                {% endif %}
-                                
-                                {% if bill.pdf_generated and not bill.pdf_sent %}
-                                <button class="btn btn-outline-info btn-sm" 
-                                        onclick="sendEmail({{ bill.id }})">
-                                    <i class="bi bi-envelope"></i> Email
-                                </button>
-                                {% endif %}
                                 
                                 <button class="btn btn-outline-success btn-sm" 
                                         onclick="generateVenmo({{ bill.id }})">
@@ -183,43 +154,6 @@
 
 {% block scripts %}
 <script>
-function generatePDF(billId) {
-    const button = event.target;
-    const originalText = showLoading(button);
-    
-    fetch(`/generate-pdf/${billId}`, {method: 'POST'})
-    .then(response => response.json())
-    .then(data => {
-        hideLoading(button, originalText);
-        showToast(data.message, data.success ? 'success' : 'error');
-        if (data.success) {
-            setTimeout(() => location.reload(), 2000);
-        }
-    })
-    .catch(error => {
-        hideLoading(button, originalText);
-        showToast('Error generating PDF: ' + error.message, 'error');
-    });
-}
-
-function sendEmail(billId) {
-    const button = event.target;
-    const originalText = showLoading(button);
-    
-    fetch(`/send-email/${billId}`, {method: 'POST'})
-    .then(response => response.json())
-    .then(data => {
-        hideLoading(button, originalText);
-        showToast(data.message, data.success ? 'success' : 'error');
-        if (data.success) {
-            setTimeout(() => location.reload(), 2000);
-        }
-    })
-    .catch(error => {
-        hideLoading(button, originalText);
-        showToast('Error sending email: ' + error.message, 'error');
-    });
-}
 
 function generateVenmo(billId) {
     const button = event.target;
