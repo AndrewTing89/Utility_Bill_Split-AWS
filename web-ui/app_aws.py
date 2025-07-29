@@ -162,6 +162,11 @@ def bill_detail(bill_id):
                          bill=bill,
                          settings=settings)
 
+@app.route('/download-pdf/<bill_id>')
+def download_pdf(bill_id):
+    """Download PDF for bill (placeholder)"""
+    return jsonify({'error': 'PDF download not implemented yet'}), 501
+
 @app.route('/api/process-bills', methods=['POST'])
 def process_bills():
     """Trigger Lambda function to process new bills"""
