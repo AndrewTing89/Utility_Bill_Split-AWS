@@ -111,7 +111,15 @@ class AWSBillDatabase:
                     'my_portion': my_portion,
                     'processed_date': bill.get('processed_date', ''),
                     'status': bill.get('status', 'processed'),
-                    'email_body': bill.get('email_body', '')
+                    'email_body': bill.get('email_body', ''),
+                    'pdf_generated': bill.get('pdf_generated', False),
+                    'pdf_sent': bill.get('pdf_sent', False),
+                    'venmo_sent': bill.get('venmo_sent', False),
+                    'email_subject': bill.get('email_subject', ''),
+                    'email_date': bill.get('email_date', ''),
+                    'email_id': bill.get('email_id', ''),
+                    'venmo_link': bill.get('venmo_link', ''),
+                    'notes': bill.get('notes', '')
                 }
             return None
             
@@ -204,14 +212,103 @@ def bill_detail(bill_id):
         return render_template('error.html', 
                              error="Bill not found"), 404
     
+    # Get processing log for this bill (placeholder for now)
+    bill_log = []  # TODO: Implement processing log retrieval from DynamoDB
+    
     return render_template('bill_detail.html', 
                          bill=bill,
+                         bill_log=bill_log,
                          settings=settings)
 
 @app.route('/download-pdf/<bill_id>')
 def download_pdf(bill_id):
     """Download PDF for bill (placeholder)"""
     return jsonify({'error': 'PDF download not implemented yet'}), 501
+
+@app.route('/generate-pdf/<bill_id>', methods=['POST'])
+def generate_pdf(bill_id):
+    """Generate PDF for bill"""
+    try:
+        bill = db.get_bill_by_id(bill_id)
+        if not bill:
+            return jsonify({'success': False, 'message': 'Bill not found'}), 404
+        
+        # TODO: Implement PDF generation via Lambda
+        return jsonify({
+            'success': True,
+            'message': 'PDF generation not implemented yet (TEST MODE)'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/send-email/<bill_id>', methods=['POST'])
+def send_email_route(bill_id):
+    """Send email for bill"""
+    try:
+        bill = db.get_bill_by_id(bill_id)
+        if not bill:
+            return jsonify({'success': False, 'message': 'Bill not found'}), 404
+        
+        # TODO: Implement email sending via SES
+        return jsonify({
+            'success': True,
+            'message': 'Email sending not implemented yet (TEST MODE)'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/test-email/<bill_id>', methods=['POST'])
+def test_email_route(bill_id):
+    """Test email for bill"""
+    try:
+        bill = db.get_bill_by_id(bill_id)
+        if not bill:
+            return jsonify({'success': False, 'message': 'Bill not found'}), 404
+        
+        settings = load_settings()
+        
+        # Return test email info
+        return jsonify({
+            'success': True,
+            'message': 'Test email would be sent (TEST MODE)',
+            'last_sent': '2025-07-29 04:30:00',
+            'debug_info': {
+                'recipient': settings.get('roommate_email', 'roommate@example.com'),
+                'sender': settings.get('my_email', 'me@example.com'),
+                'pdf_exists': bill.get('pdf_generated', False),
+                'pdf_size': 0,
+                'test_mode': settings.get('test_mode', True),
+                'email_notifications_enabled': True
+            }
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/generate-venmo/<bill_id>', methods=['POST'])
+def generate_venmo_route(bill_id):
+    """Generate Venmo request for bill"""
+    try:
+        bill = db.get_bill_by_id(bill_id)
+        if not bill:
+            return jsonify({'success': False, 'message': 'Bill not found'}), 404
+        
+        settings = load_settings()
+        
+        # Generate Venmo URL
+        venmo_url = f"venmo://paycharge?txn=charge&recipients={settings.get('roommate_venmo', 'UshiLo')}&amount={bill['roommate_portion']:.2f}&note=PG%26E%20bill%20split%20-%20{bill['due_date']}"
+        
+        return jsonify({
+            'success': True,
+            'message': 'Venmo request created',
+            'summary': {
+                'roommate_owes': f"{bill['roommate_portion']:.2f}",
+                'payment_note': f"PG&E bill split - {bill['due_date']}"
+            },
+            'venmo_url': venmo_url,
+            'web_url': f"https://venmo.com/{settings.get('roommate_venmo', 'UshiLo')}?txn=pay&amount={bill['roommate_portion']:.2f}&note=PG%26E%20bill%20split"
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 @app.route('/api/process-bills', methods=['POST'])
 def process_bills():

@@ -1,0 +1,16 @@
+{
+  "lambda_function": {
+    "function_name": "pge-bill-automation-automation-dev",
+    "runtime": "python3.12",
+    "layers": [
+      "arn:aws:lambda:us-west-2:770693421928:layer:Klayers-p312-pillow:1"
+    ],
+    "deployment_package": "lambda-deployment-no-pil.zip"
+  },
+  "notes": [
+    "PIL/Pillow is provided by Lambda Layer instead of deployment package",
+    "This reduces deployment package size significantly",
+    "Layer is maintained by the community and kept up to date",
+    "If layer doesn't work, we can create our own or use Docker approach"
+  ]
+}
