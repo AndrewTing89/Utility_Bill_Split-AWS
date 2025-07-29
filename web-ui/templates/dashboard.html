@@ -102,7 +102,7 @@
                 <i class="bi bi-receipt"></i> Recent Bills
             </div>
             <div class="card-body">
-                {% if recent_bills %}
+                {% if bills %}
                 <div class="table-responsive">
                     <table class="table table-sm">
                         <thead>
@@ -115,9 +115,9 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for bill in recent_bills %}
+                            {% for bill in bills %}
                             <tr>
-                                <td class="bill-amount">${{ "%.2f"|format(bill.bill_amount) }}</td>
+                                <td class="bill-amount">${{ "%.2f"|format(bill.amount) }}</td>
                                 <td>{{ bill.due_date }}</td>
                                 <td class="split-amount">${{ "%.2f"|format(bill.roommate_portion) }}</td>
                                 <td>
