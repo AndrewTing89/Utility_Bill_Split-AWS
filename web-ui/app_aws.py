@@ -102,7 +102,7 @@ def load_settings():
                 'roommate_venmo': 'UshiLo',
                 'my_venmo': 'andrewhting',
                 'my_phone': '+19298884132',
-                'roommate_email': 'roommate@example.com',
+                'roommate_email': 'andrewhting@gmail.com',
                 'my_email': 'andrewhting@gmail.com'
             }
             

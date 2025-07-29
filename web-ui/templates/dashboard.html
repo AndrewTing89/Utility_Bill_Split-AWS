@@ -238,10 +238,10 @@ function processBills() {
     const button = event.target;
     const originalText = showLoading(button);
     
-    fetch('/process-bills', {
+    fetch('/api/process-bills', {
         method: 'POST',
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: 'days_back=30'
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({test_mode: true, manual_trigger: true})
     })
     .then(response => response.json())
     .then(data => {
