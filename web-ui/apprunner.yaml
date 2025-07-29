@@ -4,10 +4,11 @@ build:
   commands:
     build:
       - echo "Building PG&E Bill Split Web App"
+      - cd web-ui
       - pip install --no-cache-dir -r requirements.txt
 run:
   runtime-version: 3.9
-  command: python app_aws.py
+  command: cd web-ui && python app_aws.py
   network:
     port: 8080
     env: PORT
@@ -18,7 +19,3 @@ run:
       value: "production"
     - name: AWS_REGION
       value: "us-west-2"
-    # These will be set in App Runner service configuration
-    # - name: BILLS_TABLE
-    # - name: LAMBDA_FUNCTION  
-    # - name: SECRETS_ARN
