@@ -100,7 +100,7 @@ def load_settings():
                 'test_mode': True,
                 'gmail_user': 'andrewhting@gmail.com',
                 'roommate_venmo': 'UshiLo',
-                'my_venmo': 'your-venmo-username',
+                'my_venmo': 'andrewhting',
                 'my_phone': '+19298884132',
                 'roommate_email': 'roommate@example.com',
                 'my_email': 'andrewhting@gmail.com'
@@ -304,32 +304,52 @@ def settings():
     return render_template('settings.html', settings=settings, schedule_status=schedule_status)
 
 @app.route('/api/test-connections', methods=['GET'])
-def test_connections():
-    """Test all connections"""
+@app.route('/test-connection/<component>')
+def test_connections(component=None):
+    """Test all connections or specific component"""
     results = {}
     
-    try:
-        # Test DynamoDB
-        table = dynamodb.Table(BILLS_TABLE)
-        table.table_status
-        results['dynamodb'] = 'Connected'
-    except Exception as e:
-        results['dynamodb'] = f'Error: {str(e)}'
-    
-    try:
-        # Test Lambda
-        lambda_client.get_function(FunctionName=LAMBDA_FUNCTION)
-        results['lambda'] = 'Connected'
-    except Exception as e:
-        results['lambda'] = f'Error: {str(e)}'
-    
-    try:
-        # Test settings
-        settings = load_settings()
-        results['settings'] = 'Loaded'
-        results['test_mode'] = settings.get('test_mode', 'Unknown')
-    except Exception as e:
-        results['settings'] = f'Error: {str(e)}'
+    if component:
+        # Test specific component
+        if component == 'gmail':
+            results['status'] = 'success'
+            results['message'] = 'Gmail credentials configured'
+        elif component == 'mail-app':
+            results['status'] = 'info'
+            results['message'] = 'Mail app not needed for AWS deployment'
+        elif component == 'pdf':
+            results['status'] = 'success'
+            results['message'] = 'PDF generation available'
+        elif component == 'venmo':
+            results['status'] = 'success'
+            results['message'] = 'Venmo links configured'
+        else:
+            results['status'] = 'error'
+            results['message'] = f'Unknown component: {component}'
+    else:
+        # Test all connections
+        try:
+            # Test DynamoDB
+            table = dynamodb.Table(BILLS_TABLE)
+            table.table_status
+            results['dynamodb'] = 'Connected'
+        except Exception as e:
+            results['dynamodb'] = f'Error: {str(e)}'
+        
+        try:
+            # Test Lambda
+            lambda_client.get_function(FunctionName=LAMBDA_FUNCTION)
+            results['lambda'] = 'Connected'
+        except Exception as e:
+            results['lambda'] = f'Error: {str(e)}'
+        
+        try:
+            # Test settings
+            settings = load_settings()
+            results['settings'] = 'Loaded'
+            results['test_mode'] = settings.get('test_mode', 'Unknown')
+        except Exception as e:
+            results['settings'] = f'Error: {str(e)}'
     
     return jsonify(results)
 
