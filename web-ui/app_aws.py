@@ -134,7 +134,7 @@ def dashboard():
     
     return render_template('dashboard.html', 
                          bills=bills[:5],  # Show latest 5 bills
-                         summary=summary,
+                         stats=summary,
                          settings=settings)
 
 @app.route('/bills')
