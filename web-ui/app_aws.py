@@ -428,10 +428,13 @@ def create_venmo_request():
             import smtplib
             from email.mime.text import MIMEText
             
-            # Your working SMS gateway
-            gmail_user = 'andrewhting@gmail.com'
-            gmail_app_password = 'pgcv uphl aqrm rlqe'  # Your Gmail app password
-            sms_gateway = '9298884132@vtext.com'  # Working gateway from test #12
+            # Get SMS credentials from settings
+            gmail_user = settings.get('gmail_user', 'andrewhting@gmail.com')
+            gmail_app_password = settings.get('gmail_app_password')
+            sms_gateway = settings.get('sms_gateway', '9298884132@vtext.com')
+            
+            if not gmail_app_password:
+                raise Exception("Gmail app password not configured in settings")
             
             bill_month = datetime.strptime(bill['due_date'], '%m/%d/%Y').strftime('%B %Y')
             message_body = f"💰 PG&E Bill - {bill_month}\nAmount: ${bill['roommate_portion']:.2f}\n{venmo_url}"
