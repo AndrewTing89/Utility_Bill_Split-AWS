@@ -110,6 +110,7 @@ class AWSBillAutomation:
                 
             import smtplib
             from email.mime.text import MIMEText
+            from email.mime.multipart import MIMEMultipart
             from datetime import datetime
             
             # Get SMS credentials from settings
@@ -122,23 +123,95 @@ class AWSBillAutomation:
                 return False
             
             roommate_portion = bill_data['roommate_portion']
+            total_amount = bill_data.get('amount', bill_data.get('total_amount', 0))
             bill_month = datetime.strptime(bill_data['due_date'], '%m/%d/%Y').strftime('%B %Y')
             
-            message_body = f"💰 PG&E Bill - {bill_month}\nAmount: ${roommate_portion:.2f}\n{venmo_url}"
+            # Include total amount in message - shortened for SMS
+            message_body = f"PG&E {bill_month}\nTotal: ${total_amount:.2f}\nPay: ${roommate_portion:.2f}\n{venmo_url}"
             
-            # Create and send email-to-SMS
-            msg = MIMEText(message_body)
-            msg['From'] = gmail_user
-            msg['To'] = sms_gateway
-            msg['Subject'] = ''  # Empty subject for SMS
+            # Send to both SMS gateways for better reliability
+            sms_gateways = [sms_gateway, '9298884132@mypixmessages.com']
             
             server = smtplib.SMTP('smtp.gmail.com', 587)
             server.starttls()
             server.login(gmail_user, gmail_app_password)
-            server.send_message(msg)
+            
+            # Send SMS to gateways
+            for gateway in sms_gateways:
+                msg = MIMEText(message_body)
+                msg['From'] = gmail_user
+                msg['To'] = gateway
+                msg['Subject'] = ''  # Empty subject for SMS
+                
+                try:
+                    server.send_message(msg)
+                    logger.info(f"SMS sent via email-to-SMS gateway: {gateway}")
+                except Exception as e:
+                    logger.warning(f"Failed to send to {gateway}: {e}")
+            
+            # Also send email to andrewhting@gmail.com
+            try:
+                email_msg = MIMEMultipart()
+                email_msg['From'] = gmail_user
+                email_msg['To'] = 'andrewhting@gmail.com'
+                email_msg['Subject'] = f'PG&E Bill Split - {bill_month}'
+                
+                email_body = f"""
+                <html>
+                <head>
+                    <style>
+                        .venmo-button {{
+                            display: inline-block;
+                            background-color: #3D95CE;
+                            color: white !important;
+                            padding: 12px 24px;
+                            text-decoration: none;
+                            border-radius: 5px;
+                            font-weight: bold;
+                            font-size: 16px;
+                            margin: 10px 0;
+                        }}
+                        .venmo-button:hover {{
+                            background-color: #2b7bb0;
+                        }}
+                        body {{
+                            font-family: Arial, sans-serif;
+                        }}
+                    </style>
+                </head>
+                <body>
+                    <h2>PG&E Bill Split - {bill_month}</h2>
+                    <p><strong>Total Bill Amount:</strong> ${total_amount:.2f}</p>
+                    <p><strong>Roommate's Share:</strong> ${roommate_portion:.2f}</p>
+                    <p><strong>Due Date:</strong> {bill_data['due_date']}</p>
+                    <br>
+                    
+                    <p><a href="{venmo_url}" class="venmo-button">Charge on Venmo</a></p>
+                    
+                    <p><strong>If the button doesn't work, copy this link:</strong></p>
+                    <p style="background-color: #f5f5f5; padding: 10px; border-radius: 5px; word-break: break-all;">
+                        {venmo_url}
+                    </p>
+                    
+                    <hr style="margin-top: 20px;">
+                    <p style="color: #666; font-size: 14px;">
+                        This will charge <strong>{self.settings.get('roommate_venmo')}</strong> for ${roommate_portion:.2f}<br>
+                        Note: ${roommate_portion:.2f} ({roommate_portion/total_amount*100:.1f}%) of total ${total_amount:.2f}
+                    </p>
+                </body>
+                </html>
+                """
+                
+                email_msg.attach(MIMEText(email_body, 'html'))
+                server.send_message(email_msg)
+                logger.info("Email notification sent to andrewhting@gmail.com")
+                
+            except Exception as e:
+                logger.error(f"Failed to send email notification: {e}")
+            
             server.quit()
             
-            logger.info(f"SMS sent via email-to-SMS gateway: {sms_gateway}")
+            logger.info(f"Notifications sent via SMS gateways and email")
             
             # Update bill record with SMS sent status and timestamp
             try:
@@ -276,12 +349,23 @@ def run_monthly_automation(test_mode: bool = True) -> Dict:
             bill_id = bill_data['bill_id']
             
             try:
-                # Generate Venmo info
+                # Generate Venmo info - use HTTPS URL for better email compatibility
+                venmo_username = automation.settings['roommate_venmo']
+                amount = bill_data['roommate_portion']
+                total = bill_data.get('amount', 0)
+                
+                # Create a cleaner note with line breaks
+                note = f"Balance--${amount:.2f}\nTotal--${total:.2f}\nDue--{bill_data['due_date']}"
+                # URL encode the note properly
+                import urllib.parse
+                encoded_note = urllib.parse.quote(note)
+                
+                # Use Venmo's web URL which redirects to app on mobile
                 venmo_info = {
-                    'venmo_url': f"venmo://paycharge?txn=charge&recipients={automation.settings['roommate_venmo']}&amount={bill_data['roommate_portion']:.2f}",
+                    'venmo_url': f"https://venmo.com/{venmo_username}?txn=charge&amount={amount:.2f}&note={encoded_note}",
                     'summary': {
                         'roommate_owes': bill_data['roommate_portion'],
-                        'payment_note': f"PG&E bill split - {bill_data['due_date']}"
+                        'payment_note': note
                     }
                 }
                 
