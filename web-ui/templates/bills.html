@@ -48,7 +48,7 @@
                                 {{ bill.processed_date.split(' ')[0] if bill.processed_date else 'N/A' }}
                             </small>
                         </td>
-                        <td class="bill-amount">${{ "%.2f"|format(bill.bill_amount) }}</td>
+                        <td class="bill-amount">${{ "%.2f"|format(bill.amount) }}</td>
                         <td>
                             {{ bill.due_date }}
                             {% set due_date = bill.due_date.split('/') %}  
@@ -125,7 +125,7 @@
 
 <!-- Summary Cards -->
 <div class="row mt-4">
-    {% set total_amount = bills | sum(attribute='bill_amount') %}
+    {% set total_amount = bills | sum(attribute='amount') %}
     {% set total_roommate = bills | sum(attribute='roommate_portion') %}
     {% set total_mine = bills | sum(attribute='my_portion') %}
     
