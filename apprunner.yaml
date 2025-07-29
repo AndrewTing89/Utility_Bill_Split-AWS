@@ -1,13 +1,12 @@
 version: 1.0
-runtime: python3
+runtime: python311
 build:
   commands:
     build:
-      - echo "Building PG&E Bill Split Web App - Updated"
-      - pip install --no-cache-dir -r web-ui/requirements.txt
+      - echo "Building PG&E Bill Split Web App - Python 3.11"
+      - pip3 install --no-cache-dir -r web-ui/requirements.txt
 run:
-  runtime-version: 3.11
-  command: cd web-ui && python app_aws.py
+  command: cd web-ui && python3 app_aws.py
   network:
     port: 8080
     env: PORT
