@@ -6,7 +6,7 @@ build:
       - echo "Building PG&E Bill Split Web App - Python 3.11"
       - pip3 install --no-cache-dir -r web-ui/requirements.txt
 run:
-  command: cd web-ui && python3 app_aws.py
+  command: python3 web-ui/app_aws.py
   network:
     port: 8080
     env: PORT
