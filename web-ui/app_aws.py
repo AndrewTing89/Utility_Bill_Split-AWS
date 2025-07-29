@@ -95,13 +95,15 @@ def load_settings():
     """Load settings from AWS Secrets Manager"""
     try:
         if not SECRETS_ARN:
-            # Default settings for development
+            # Default settings with your actual info for development
             return {
                 'test_mode': True,
+                'gmail_user': 'andrewhting@gmail.com',
                 'roommate_venmo': 'UshiLo',
+                'my_venmo': 'your-venmo-username',
                 'my_phone': '+19298884132',
                 'roommate_email': 'roommate@example.com',
-                'my_email': 'your-email@gmail.com'
+                'my_email': 'andrewhting@gmail.com'
             }
             
         response = secrets_client.get_secret_value(SecretId=SECRETS_ARN)
@@ -109,7 +111,11 @@ def load_settings():
         
     except Exception as e:
         logger.error(f"Error loading settings: {e}")
-        return {'test_mode': True}
+        return {
+            'test_mode': True,
+            'gmail_user': 'andrewhting@gmail.com',
+            'my_phone': '+19298884132'
+        }
 
 # Initialize database
 db = AWSBillDatabase()
@@ -121,9 +127,9 @@ def dashboard():
     settings = load_settings()
     
     # Calculate summary statistics
-    total_bills = len(bills)
-    total_amount = sum(bill['amount'] for bill in bills)
-    total_roommate_portion = sum(bill['roommate_portion'] for bill in bills)
+    total_bills = len(bills) if bills else 0
+    total_amount = sum(bill['amount'] for bill in bills) if bills else 0
+    total_roommate_portion = sum(bill['roommate_portion'] for bill in bills) if bills else 0
     
     summary = {
         'total_bills': total_bills,
@@ -296,6 +302,36 @@ def settings():
     settings = load_settings()
     schedule_status = {'loaded': True, 'next_run': 'February 5, 2025 at 2:00 AM PT'}
     return render_template('settings.html', settings=settings, schedule_status=schedule_status)
+
+@app.route('/api/test-connections', methods=['GET'])
+def test_connections():
+    """Test all connections"""
+    results = {}
+    
+    try:
+        # Test DynamoDB
+        table = dynamodb.Table(BILLS_TABLE)
+        table.table_status
+        results['dynamodb'] = 'Connected'
+    except Exception as e:
+        results['dynamodb'] = f'Error: {str(e)}'
+    
+    try:
+        # Test Lambda
+        lambda_client.get_function(FunctionName=LAMBDA_FUNCTION)
+        results['lambda'] = 'Connected'
+    except Exception as e:
+        results['lambda'] = f'Error: {str(e)}'
+    
+    try:
+        # Test settings
+        settings = load_settings()
+        results['settings'] = 'Loaded'
+        results['test_mode'] = settings.get('test_mode', 'Unknown')
+    except Exception as e:
+        results['settings'] = f'Error: {str(e)}'
+    
+    return jsonify(results)
 
 @app.route('/health')
 def health_check():
