@@ -8,16 +8,16 @@
     
     <!-- Filter Buttons -->
     <div class="btn-group" role="group">
-        <a href="{{ url_for('bills_list', status='all') }}" 
-           class="btn btn-{{ 'primary' if current_status == 'all' else 'outline-primary' }}">
+        <a href="{{ url_for('bills') }}" 
+           class="btn btn-primary">
             All
         </a>
-        <a href="{{ url_for('bills_list', status='pending') }}" 
+        <a href="{{ url_for('bills') }}" 
            class="btn btn-{{ 'warning' if current_status == 'pending' else 'outline-warning' }}">
             Pending
         </a>
-        <a href="{{ url_for('bills_list', status='completed') }}" 
-           class="btn btn-{{ 'success' if current_status == 'completed' else 'outline-success' }}">
+        <a href="{{ url_for('bills') }}" 
+           class="btn btn-outline-success">
             Completed
         </a>
     </div>

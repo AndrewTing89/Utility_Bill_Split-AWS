@@ -129,6 +129,7 @@ def dashboard():
         'total_bills': total_bills,
         'total_amount': total_amount,
         'total_roommate_portion': total_roommate_portion,
+        'pending_bills': 0,  # For now, no pending logic
         'average_bill': total_amount / total_bills if total_bills > 0 else 0
     }
     
@@ -288,7 +289,8 @@ def send_email():
 def settings():
     """Settings page"""
     settings = load_settings()
-    return render_template('settings.html', settings=settings)
+    schedule_status = {'loaded': True, 'next_run': 'February 5, 2025 at 2:00 AM PT'}
+    return render_template('settings.html', settings=settings, schedule_status=schedule_status)
 
 @app.route('/health')
 def health_check():
