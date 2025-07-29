@@ -4,7 +4,8 @@ build:
   commands:
     build:
       - echo "Building PG&E Bill Split Web App - Python 3.11"
-      - pip3 install --no-cache-dir -r web-ui/requirements.txt
+      - python3 -m pip install --upgrade pip
+      - python3 -m pip install --no-cache-dir -r web-ui/requirements.txt
 run:
   command: python3 web-ui/app_aws.py
   network:
